@@ -29,16 +29,16 @@ public class RouteNotams {
 
     /** Central angle (radians) between two points via Haversine formula. */
     public static double centralAngleRad(double lat1Deg, double lon1Deg, double lat2Deg, double lon2Deg) {
-        double φ1 = Math.toRadians(lat1Deg);
-        double λ1 = Math.toRadians(lon1Deg);
-        double φ2 = Math.toRadians(lat2Deg);
-        double λ2 = Math.toRadians(lon2Deg);
+        double lat1 = Math.toRadians(lat1Deg);
+        double lon1 = Math.toRadians(lon1Deg);
+        double lat2 = Math.toRadians(lat2Deg);
+        double lon2 = Math.toRadians(lon2Deg);
 
-        double dφ = φ2 - φ1;
-        double dλ = λ2 - λ1;
+        double dLat = lat2 - lat1;
+        double dLon = lon2 - lon1;
 
-        double a = Math.sin(dφ / 2) * Math.sin(dφ / 2) +
-                   Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) * Math.sin(dλ / 2);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                   Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return 2 * Math.asin(Math.sqrt(a));  // radians
     }
 
