@@ -5,13 +5,13 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * RouteNotams
+ * RouteCalculator
  *
  * - Computes great-circle route points between two coordinates
  * - Samples points along the route by spacing in nautical miles
  *
  */
-public class RouteNotams {
+public class RouteCalculator {
 
     // ---- Small helper record for lat/lon ----
     public static final class LatLon {
