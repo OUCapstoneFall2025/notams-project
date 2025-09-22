@@ -1,6 +1,8 @@
 package org.example.notams;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * RouteNotams
@@ -128,5 +130,6 @@ public class RouteNotams {
         for (int i = 0; i < wpts.size(); i++){
             System.out.println("Waypoint " + (i+1) + ": " + wpts.get(i));
         }
+        System.out.println("Finished running.");
     }
 }
