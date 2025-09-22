@@ -34,10 +34,10 @@ public class RouteNotams {
         double lat2 = Math.toRadians(lat2Deg);
         double lon2 = Math.toRadians(lon2Deg);
 
-        double dLat = lat2 - lat1;
-        double dLon = lon2 - lon1;
+        final double dLat = lat2 - lat1;
+        final double dLon = lon2 - lon1;
 
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        final double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return 2 * Math.asin(Math.sqrt(a));  // radians
     }
