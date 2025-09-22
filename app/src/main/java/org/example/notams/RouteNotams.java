@@ -103,7 +103,7 @@ public class RouteNotams {
      * Produce waypoints separated by ~spacingNm along the route.
      * Ensures overlap when used with a similar query radius.
      */
-    public static List<LatLon> sampleBySpacingNm(double lat1Deg, double lon1Deg,
+    public static List<LatLon> getRouteWaypoints(double lat1Deg, double lon1Deg,
                                                  double lat2Deg, double lon2Deg,
                                                  double spacingNm) {
         double totalNm = distanceNm(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
@@ -123,7 +123,7 @@ public class RouteNotams {
         System.out.printf("Route distance: ~%.1f NM%n",
                 distanceNm(kokcLat, kokcLon, kdfwLat, kdfwLon));
 
-        var wpts = sampleBySpacingNm(kokcLat, kokcLon, kdfwLat, kdfwLon, spacingNm);
+        var wpts = getRouteWaypoints(kokcLat, kokcLon, kdfwLat, kdfwLon, spacingNm);
         System.out.println("Waypoints: " + wpts.size());
         for (int i = 0; i < wpts.size(); i++){
             System.out.println("Waypoint " + (i+1) + ": " + wpts.get(i));
