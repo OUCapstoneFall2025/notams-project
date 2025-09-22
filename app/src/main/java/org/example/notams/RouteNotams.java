@@ -1,11 +1,5 @@
 package org.example.notams;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.*;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.*;
 
 /**
@@ -13,9 +7,7 @@ import java.util.*;
  *
  * - Computes great-circle route points between two coordinates
  * - Samples points along the route by spacing in nautical miles
- * - Queries FAA NOTAM API around each point with a radius (NM)
  *
- * Requirements: Java 11+ (uses java.net.http.HttpClient)
  */
 public class RouteNotams {
 
@@ -119,109 +111,22 @@ public class RouteNotams {
         return interpolateRoute(lat1Deg, lon1Deg, lat2Deg, lon2Deg, segments);
     }
 
-    // ---------- FAA NOTAM API calls ----------
-
-    private static final String FAA_BASE = "https://external-api.faa.gov/notamapi/v1/notams";
-
-    private static String encode(String v) {
-        return URLEncoder.encode(v, StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Calls the FAA NOTAM API (GeoJSON) using locationLatitude/Longitude/Radius.
-     * Returns the raw JSON string.
-     */
-    public static String fetchNotamsGeoJson(double lat, double lon, int radiusNm,
-                                            String clientId, String clientSecret,
-                                            int pageSize, int pageNum) throws IOException, InterruptedException {
-        // Build query parameters according to the RAML trait you were given
-        String uri = FAA_BASE
-                + "?responseFormat=" + encode("geoJson")
-                + "&locationLatitude=" + encode(String.format(Locale.US, "%.6f", lat))
-                + "&locationLongitude=" + encode(String.format(Locale.US, "%.6f", lon))
-                + "&locationRadius=" + radiusNm
-                + "&pageSize=" + pageSize
-                + "&pageNum=" + pageNum;
-
-        HttpRequest req = HttpRequest.newBuilder(URI.create(uri))
-                .timeout(Duration.ofSeconds(30))
-                .header("client_id", clientId)
-                .header("client_secret", clientSecret)
-                .header("Accept", "application/json")
-                .GET()
-                .build();
-
-        HttpClient http = HttpClient.newHttpClient();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        return resp.body();
-    }
-
-    /**
-     * Sweep NOTAMs along a route: sample points, query at each point, collect raw JSON responses.
-     * (You can later parse & de-duplicate by NOTAM id/number.)
-     */
-    public static List<String> fetchRouteNotams(double lat1Deg, double lon1Deg,
-                                                double lat2Deg, double lon2Deg,
-                                                double spacingNm, int radiusNm,
-                                                String clientId, String clientSecret)
-            throws IOException, InterruptedException {
-
-        List<LatLon> waypoints = sampleBySpacingNm(lat1Deg, lon1Deg, lat2Deg, lon2Deg, spacingNm);
-        List<String> jsonResponses = new ArrayList<>();
-
-        for (LatLon p : waypoints) {
-            System.out.printf(Locale.US, "Querying waypoint (%.5f, %.5f)%n", p.latDeg, p.lonDeg);
-            String json = fetchNotamsGeoJson(p.latDeg, p.lonDeg, radiusNm, clientId, clientSecret, 100, 1);
-            jsonResponses.add(json);
-        }
-        return jsonResponses;
-    }
-
-    private static int approxNotamCount(String geojson) {
-    int count = 0, idx = 0;
-    String needle = "\"type\":\"Feature\"";
-    while ((idx = geojson.indexOf(needle, idx)) >= 0) { count++; idx += needle.length(); }
-    return count;
-    }
-
-
     // ---------- Demo main ----------
     public static void main(String[] args) throws Exception {
         // Example: KOKC -> KDFW (approx coords)
         double kokcLat = 35.3931, kokcLon = -97.6007;
         double kdfwLat = 32.8998, kdfwLon = -97.0403;
 
-        // Environment (or replace with literals for a quick test)
-        String clientId = System.getenv("FAA_CLIENT_ID");
-        String clientSecret = System.getenv("FAA_CLIENT_SECRET");
-        if (clientId == null || clientSecret == null) {
-            System.err.println("Set FAA_CLIENT_ID and FAA_CLIENT_SECRET env vars first.");
-            System.exit(1);
-        }
-
-        // Choose corridor spacing and radius (NM)
+        // Choose sample spacing
         double spacingNm = 25.0; // distance between sample points
-        int radiusNm = 25;       // circle radius at each sample point
 
         System.out.printf("Route distance: ~%.1f NM%n",
                 distanceNm(kokcLat, kokcLon, kdfwLat, kdfwLon));
 
-        List<String> results = fetchRouteNotams(
-                kokcLat, kokcLon, kdfwLat, kdfwLon,
-                spacingNm, radiusNm, clientId, clientSecret
-        );
-
-        // For now, just print sizes and first 200 chars of each result
-        for (int i = 0; i < results.size(); i++) {
-            String s = results.get(i);
-            System.out.println("---- Waypoint " + i + " response ----");
-            System.out.println(s.substring(0, Math.min(200, s.length())) + (s.length() > 200 ? "..." : ""));
+        var wpts = sampleBySpacingNm(kokcLat, kokcLon, kdfwLat, kdfwLon, spacingNm);
+        System.out.println("Waypoints: " + wpts.size());
+        for (int i = 0; i < wpts.size(); i++){
+            System.out.println("Waypoint " + (i+1) + ": " + wpts.get(i));
         }
-
-        // TODO:
-        // - Parse GeoJSON (e.g., with Jackson or org.json),
-        // - Collect each NOTAM "id" or "number",
-        // - De-duplicate across responses,
-        // - Persist or display as needed.
     }
 }
