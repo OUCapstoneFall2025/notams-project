@@ -28,7 +28,7 @@ public class RouteNotams {
     // ---------- Great-circle math ----------
 
     /** Central angle (radians) between two points via Haversine formula. */
-    public static double centralAngleRad(double lat1Deg, double lon1Deg, double lat2Deg, double lon2Deg) {
+    private static double centralAngleRad(double lat1Deg, double lon1Deg, double lat2Deg, double lon2Deg) {
         double lat1 = Math.toRadians(lat1Deg);
         double lon1 = Math.toRadians(lon1Deg);
         double lat2 = Math.toRadians(lat2Deg);
