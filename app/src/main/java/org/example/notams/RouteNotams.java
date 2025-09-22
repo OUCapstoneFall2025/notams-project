@@ -196,7 +196,7 @@ public class RouteNotams {
         String clientSecret = System.getenv("FAA_CLIENT_SECRET");
         if (clientId == null || clientSecret == null) {
             System.err.println("Set FAA_CLIENT_ID and FAA_CLIENT_SECRET env vars first.");
-            return;
+            System.exit(1);
         }
 
         // Choose corridor spacing and radius (NM)
