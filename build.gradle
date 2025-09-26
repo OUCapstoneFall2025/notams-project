@@ -1,0 +1,28 @@
+plugins {
+    id 'application'
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JUnit 5
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly  libs.junit.platform.launcher 
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+application {
+    mainClass = 'ou.capstone.notams.App'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

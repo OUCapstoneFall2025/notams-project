@@ -1,0 +1,11 @@
+[versions]
+junit = "5.10.2"
+platform = "1.10.2"   # JUnit Platform version (matches JUnit 5.10.x)
+guava = "33.1.0-jre"
+
+[libraries]
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "platform" }
+guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
+
+
