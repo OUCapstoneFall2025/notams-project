@@ -1,0 +1,30 @@
+plugins {
+    id 'application'
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JUnit 5
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+
+    // If you really need Guava, uncomment this line:
+    // implementation 'com.google.guava:guava:33.1.0-jre'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+application {
+    mainClass = 'edu.ou.capstone.notams.App'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
