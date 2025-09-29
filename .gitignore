@@ -1,5 +1,6 @@
 # key storage for secrets
 api-keys.sh
+.idea/
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,linux,macos,vim,emacs,visualstudio,visualstudiocode,python,java,venv,eclipse
 # Edit at https://www.toptal.com/developers/gitignore?templates=windows,linux,macos,vim,emacs,visualstudio,visualstudiocode,python,java,venv,eclipse

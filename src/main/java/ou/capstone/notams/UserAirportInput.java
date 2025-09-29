@@ -1,11 +1,11 @@
-package tempNotams;
+package ou.capstone.notams;
 
 import java.io.Console;
 import java.util.List;
 
-public final class UserAirportInputTemp {
+public final class UserAirportInput {
 
-    private UserAirportInputTemp() { }
+    private UserAirportInput() { }
 
     /**
      * Collects exactly two airport codes from args or user prompt.
