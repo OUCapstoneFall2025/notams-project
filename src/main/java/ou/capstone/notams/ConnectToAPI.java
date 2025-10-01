@@ -1,4 +1,4 @@
-package tempNotams;
+package ou.capstone.notams;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -8,7 +8,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 
-public final class ConnectToAPITemp {
+public final class ConnectToAPI {
 
     public static void main(String[] args) throws Exception {
         final String clientId = System.getenv("FAA_CLIENT_ID");
