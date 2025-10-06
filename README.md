@@ -41,6 +41,20 @@ By surfacing the most relevant NOTAMs, this tool reduces information overload an
 * Gather pilot/SME feedback to refine system output.
 * Improve speed of returned results
 
+
+---
+
+## Testing 
+
+### Run all tests:
+./gradlew test
+
+### Run a single test:
+./gradlew test --tests 'ou.capstone.notams.AppTest'
+
+### Generate a report:
+build/reports/tests/test/index.html
+
 ---
 
 ## Team Members
