@@ -1,4 +1,4 @@
-package org.example.notams;
+package ou.capstone.notams.route;
 
 import java.util.ArrayList;
 import java.util.List;
