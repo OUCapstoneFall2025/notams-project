@@ -16,6 +16,10 @@ dependencies {
     // JUnit 5
     testImplementation libs.junit.jupiter
     testRuntimeOnly  libs.junit.platform.launcher 
+    
+    // Logging
+    implementation libs.slf4j.api
+    implementation libs.logback.classic
 }
 
 java {
