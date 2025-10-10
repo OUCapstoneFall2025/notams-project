@@ -3,6 +3,8 @@ package ou.capstone.notams.route;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * RouteCalculator
@@ -12,6 +14,7 @@ import java.util.Locale;
  *
  */
 public class RouteCalculator {
+    private static final Logger logger = LoggerFactory.getLogger(RouteCalculator.class);
 
     // ---- Small helper record for lat/lon ----
     public static final class Coordinate {
@@ -46,7 +49,11 @@ public class RouteCalculator {
 
     /** Great-circle distance in nautical miles. */
     public static double distanceNm(double lat1Deg, double lon1Deg, double lat2Deg, double lon2Deg) {
-        return R_NM * centralAngleRad(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
+        logger.debug("Calculating great-circle distance between ({}, {}) and ({}, {})", 
+                     lat1Deg, lon1Deg, lat2Deg, lon2Deg);
+        double distance = R_NM * centralAngleRad(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
+        logger.debug("Calculated distance: {:.2f} nautical miles", distance);
+        return distance;
     }
 
     /**
@@ -56,6 +63,9 @@ public class RouteCalculator {
     public static List<Coordinate> interpolateRoute(double lat1Deg, double lon1Deg,
                                                 double lat2Deg, double lon2Deg,
                                                 int segments) {
+        logger.debug("Starting route interpolation with {} segments between ({}, {}) and ({}, {})", 
+                     segments, lat1Deg, lon1Deg, lat2Deg, lon2Deg);
+        
         double lat1 = Math.toRadians(lat1Deg);
         double lon1 = Math.toRadians(lon1Deg);
         double lat2 = Math.toRadians(lat2Deg);
@@ -80,6 +90,8 @@ public class RouteCalculator {
 
         // If points are identical or nearly so, just return the start
         if (theta < 1e-12) {
+            logger.debug("Points are identical or nearly identical (theta={}), returning {} identical coordinates", 
+                         theta, segments + 1);
             for (int i = 0; i <= segments; i++) coords.add(new Coordinate(lat1Deg, lon1Deg));
             return coords;
         }
@@ -98,6 +110,7 @@ public class RouteCalculator {
 
             coords.add(new Coordinate(Math.toDegrees(phi), Math.toDegrees(lambda)));
         }
+        logger.debug("Route interpolation completed. Generated {} coordinates", coords.size());
         return coords;
     }
 
@@ -108,19 +121,39 @@ public class RouteCalculator {
     public static List<Coordinate> getRouteWaypoints(double lat1Deg, double lon1Deg,
                                                  double lat2Deg, double lon2Deg,
                                                  double spacingNm) {
+        if (spacingNm <= 0) {
+            logger.error("Invalid spacing value: {} NM. Spacing must be positive.", spacingNm);
+            throw new IllegalArgumentException("Spacing must be positive, got: " + spacingNm);
+        }
+        
+        logger.info("Generating route waypoints with {} NM spacing between ({}, {}) and ({}, {})", 
+                    spacingNm, lat1Deg, lon1Deg, lat2Deg, lon2Deg);
+        
         double totalNm = distanceNm(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
         int segments = Math.max(1, (int) Math.ceil(totalNm / spacingNm));
-        return interpolateRoute(lat1Deg, lon1Deg, lat2Deg, lon2Deg, segments);
+        
+        logger.info("Total route distance: {:.2f} NM, calculated {} segments for {} NM spacing", 
+                    totalNm, segments, spacingNm);
+        
+        List<Coordinate> waypoints = interpolateRoute(lat1Deg, lon1Deg, lat2Deg, lon2Deg, segments);
+        logger.info("Generated {} waypoints for route", waypoints.size());
+        
+        return waypoints;
     }
 
     // ---------- Demo main ----------
     public static void main(String[] args) throws Exception {
+        logger.info("Starting RouteCalculator demo");
+        
         // Example: KOKC -> KDFW (approx coords)
         final double kokcLat = 35.3931, kokcLon = -97.6007;
         final double kdfwLat = 32.8998, kdfwLon = -97.0403;
 
         // Choose sample spacing
         final double spacingNm = 25.0; // distance between sample points
+        
+        logger.info("Demo route: KOKC ({}, {}) -> KDFW ({}, {}) with {} NM spacing", 
+                    kokcLat, kokcLon, kdfwLat, kdfwLon, spacingNm);
 
         System.out.printf("Route distance: ~%.1f NM%n",
                 distanceNm(kokcLat, kokcLon, kdfwLat, kdfwLon));
@@ -130,6 +163,8 @@ public class RouteCalculator {
         for (int i = 0; i < wpts.size(); i++){
             System.out.println("Waypoint " + (i+1) + ": " + wpts.get(i));
         }
+        
+        logger.info("RouteCalculator demo completed successfully");
         System.out.println("Finished running.");
     }
 }
