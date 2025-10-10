@@ -1,5 +1,6 @@
 package ou.capstone.notams;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -49,7 +50,14 @@ public final class ConnectToAPI {
 
         System.out.println("URL: " + uri);
         System.out.println("Status: " + response.statusCode());
-        System.out.println(response.body());
+        final String body = response.body();
+        System.out.println(body);
+
+        if (response.statusCode() == 200) {
+            new GeoJsonReader().readGeoJson(body);
+        } else {
+            throw new IOException("FAA API returned non-200 status: " + response.statusCode());
+        }
     }
 
     private static String enc(final String s) {
