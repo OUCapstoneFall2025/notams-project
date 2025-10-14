@@ -1,7 +1,7 @@
 package ou.capstone.notams.api;
 
 import ou.capstone.notams.route.RouteCalculator;
-import ou.capstone.notams.route.RouteCalculator.Coordinate;
+import ou.capstone.notams.route.Coordinate;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -76,7 +76,7 @@ public class NotamFetcher {
         
         // Fetch NOTAMs at each waypoint
         for (Coordinate waypoint : waypoints) {
-            String response = fetchForLocation(waypoint.latDeg, waypoint.lonDeg, QUERY_RADIUS_NM);
+            String response = fetchForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
             responses.add(response);
         }
         
