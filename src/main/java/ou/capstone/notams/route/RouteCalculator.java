@@ -16,17 +16,6 @@ import org.slf4j.LoggerFactory;
 public class RouteCalculator {
     private static final Logger logger = LoggerFactory.getLogger(RouteCalculator.class);
 
-    // ---- Small helper record for lat/lon ----
-    public static final class Coordinate {
-        public final double latDeg;
-        public final double lonDeg;
-        public Coordinate(double latDeg, double lonDeg) {
-            this.latDeg = latDeg;
-            this.lonDeg = lonDeg;
-        }
-        @Override public String toString() { return String.format(Locale.US, "(%.6f, %.6f)", latDeg, lonDeg); }
-    }
-
     // Earth radius (nautical miles)
     private static final double R_NM = 3440.065;
 

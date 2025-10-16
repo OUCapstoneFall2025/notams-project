@@ -52,51 +52,51 @@ class RouteCalculatorTest {
 
     @Test
     void testInterpolateRoute_TwoSegments() {
-        List<RouteCalculator.Coordinate> points = 
+        List<Coordinate> points = 
             RouteCalculator.interpolateRoute(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, 2);
         
         assertEquals(3, points.size(), "2 segments should produce 3 points");
         
         // First point should be start
-        assertEquals(KOKC_LAT, points.get(0).latDeg, COORD_TOLERANCE);
-        assertEquals(KOKC_LON, points.get(0).lonDeg, COORD_TOLERANCE);
+        assertEquals(KOKC_LAT, points.get(0).getLatitude(), COORD_TOLERANCE);
+        assertEquals(KOKC_LON, points.get(0).getLongitude(), COORD_TOLERANCE);
         
         // Last point should be end
-        assertEquals(KDFW_LAT, points.get(2).latDeg, COORD_TOLERANCE);
-        assertEquals(KDFW_LON, points.get(2).lonDeg, COORD_TOLERANCE);
+        assertEquals(KDFW_LAT, points.get(2).getLatitude(), COORD_TOLERANCE);
+        assertEquals(KDFW_LON, points.get(2).getLongitude(), COORD_TOLERANCE);
         
         // Middle point should be between start and end
-        assertTrue(points.get(1).latDeg < KOKC_LAT && points.get(1).latDeg > KDFW_LAT);
+        assertTrue(points.get(1).getLatitude() < KOKC_LAT && points.get(1).getLatitude() > KDFW_LAT);
     }
 
     @Test
     void testInterpolateRoute_OneSegment() {
-        List<RouteCalculator.Coordinate> points = 
+        List<Coordinate> points = 
             RouteCalculator.interpolateRoute(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, 1);
         
         assertEquals(2, points.size(), "1 segment should produce 2 points (start and end)");
-        assertEquals(KOKC_LAT, points.get(0).latDeg, COORD_TOLERANCE);
-        assertEquals(KDFW_LAT, points.get(1).latDeg, COORD_TOLERANCE);
+        assertEquals(KOKC_LAT, points.get(0).getLatitude(), COORD_TOLERANCE);
+        assertEquals(KDFW_LAT, points.get(1).getLatitude(), COORD_TOLERANCE);
     }
 
     @Test
     void testInterpolateRoute_IdenticalPoints() {
-        List<RouteCalculator.Coordinate> points = 
+        List<Coordinate> points = 
             RouteCalculator.interpolateRoute(KOKC_LAT, KOKC_LON, KOKC_LAT, KOKC_LON, 5);
         
         assertEquals(6, points.size(), "Should still produce correct number of points");
         
         // All points should be the same
-        for (RouteCalculator.Coordinate point : points) {
-            assertEquals(KOKC_LAT, point.latDeg, COORD_TOLERANCE);
-            assertEquals(KOKC_LON, point.lonDeg, COORD_TOLERANCE);
+        for (Coordinate point : points) {
+            assertEquals(KOKC_LAT, point.getLatitude(), COORD_TOLERANCE);
+            assertEquals(KOKC_LON, point.getLongitude(), COORD_TOLERANCE);
         }
     }
 
     @Test
     void testGetRouteWaypoints_StandardSpacing() {
         double spacingNm = 50.0;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Route is ~152 NM, so with 50 NM spacing we expect 3-4 waypoints
@@ -104,14 +104,14 @@ class RouteCalculatorTest {
                    "Expected 3-4 waypoints for 152 NM route with 50 NM spacing, got: " + waypoints.size());
         
         // First and last should match endpoints
-        assertEquals(KOKC_LAT, waypoints.get(0).latDeg, COORD_TOLERANCE);
-        assertEquals(KDFW_LAT, waypoints.get(waypoints.size() - 1).latDeg, COORD_TOLERANCE);
+        assertEquals(KOKC_LAT, waypoints.get(0).getLatitude(), COORD_TOLERANCE);
+        assertEquals(KDFW_LAT, waypoints.get(waypoints.size() - 1).getLatitude(), COORD_TOLERANCE);
     }
 
     @Test
     void testGetRouteWaypoints_SmallSpacing() {
         double spacingNm = 25.0;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Route is ~152 NM, so with 25 NM spacing we expect 6-7 waypoints
@@ -122,7 +122,7 @@ class RouteCalculatorTest {
     @Test
     void testGetRouteWaypoints_LargeSpacing() {
         double spacingNm = 200.0;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Spacing larger than route distance should give 2 points (start and end)
@@ -132,16 +132,16 @@ class RouteCalculatorTest {
     @Test
     void testGetRouteWaypoints_VerifySpacing() {
         double spacingNm = 50.0;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Verify spacing between consecutive waypoints is approximately correct
         // Note: We exclude the last waypoint because the final segment length may vary
         // since the total route distance may not be an exact multiple of the spacing
         for (int i = 0; i < waypoints.size() - 1; i++) {
-            RouteCalculator.Coordinate p1 = waypoints.get(i);
-            RouteCalculator.Coordinate p2 = waypoints.get(i + 1);
-            double dist = RouteCalculator.distanceNm(p1.latDeg, p1.lonDeg, p2.latDeg, p2.lonDeg);
+            Coordinate p1 = waypoints.get(i);
+            Coordinate p2 = waypoints.get(i + 1);
+            double dist = RouteCalculator.distanceNm(p1.getLatitude(), p1.getLongitude(), p2.getLatitude(), p2.getLongitude());
             
             // Spacing should be close to requested spacing (within 20% tolerance)
             assertTrue(dist <= spacingNm * 1.2, 
@@ -156,17 +156,17 @@ class RouteCalculatorTest {
         double lat1 = 35.0, lon1 = -97.0;
         double lat2 = 35.15, lon2 = -97.0; // roughly 10 NM north
         
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(lat1, lon1, lat2, lon2, 50.0);
         
         assertEquals(2, waypoints.size(), "Short route should give 2 waypoints");
-        assertEquals(lat1, waypoints.get(0).latDeg, COORD_TOLERANCE);
-        assertEquals(lat2, waypoints.get(1).latDeg, COORD_TOLERANCE);
+        assertEquals(lat1, waypoints.get(0).getLatitude(), COORD_TOLERANCE);
+        assertEquals(lat2, waypoints.get(1).getLatitude(), COORD_TOLERANCE);
     }
 
     @Test
     void testCoordinate_ToString() {
-        RouteCalculator.Coordinate coord = new RouteCalculator.Coordinate(35.3931, -97.6007);
+        Coordinate coord = new Coordinate(35.3931, -97.6007);
         String str = coord.toString();
         
         assertTrue(str.contains("35.393"), "toString should contain latitude");
@@ -176,7 +176,7 @@ class RouteCalculatorTest {
     @Test
     void testGetRouteWaypoints_ExtremelySmallSpacing() {
         double spacingNm = 0.01;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Should handle tiny spacing without errors
@@ -186,7 +186,7 @@ class RouteCalculatorTest {
     @Test
     void testGetRouteWaypoints_ExtremelyLargeSpacing() {
         double spacingNm = Integer.MAX_VALUE;
-        List<RouteCalculator.Coordinate> waypoints = 
+        List<Coordinate> waypoints = 
             RouteCalculator.getRouteWaypoints(KOKC_LAT, KOKC_LON, KDFW_LAT, KDFW_LON, spacingNm);
         
         // Spacing larger than any realistic route should give 2 points (start and end)
