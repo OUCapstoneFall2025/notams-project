@@ -47,10 +47,10 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertEquals(1, notams.size());
-        Notam notam = notams.get(0);
+        final Notam notam = notams.get(0);
         
         assertEquals("N123456", notam.getId());
         assertEquals("10/182", notam.getNumber());
@@ -111,7 +111,7 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertEquals(2, notams.size());
         assertEquals("N001", notams.get(0).getId());
@@ -127,20 +127,20 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertTrue(notams.isEmpty());
     }
 
     @Test
     void testParseNullResponse() {
-        List<Notam> notams = parser.parseGeoJson(null);
+        final List<Notam> notams = parser.parseGeoJson(null);
         assertTrue(notams.isEmpty());
     }
 
     @Test
     void testParseEmptyString() {
-        List<Notam> notams = parser.parseGeoJson("");
+        final List<Notam> notams = parser.parseGeoJson("");
         assertTrue(notams.isEmpty());
     }
 
@@ -179,7 +179,7 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         // Should skip this feature due to missing required fields
         assertTrue(notams.isEmpty());
@@ -215,7 +215,7 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertEquals(1, notams.size());
         assertEquals(5.0, notams.get(0).getRadiusNm());
@@ -251,10 +251,86 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertEquals(1, notams.size());
         assertEquals(10.0, notams.get(0).getRadiusNm());
+    }
+
+    @Test
+    void testParseWithRadiusInBothLocations() {
+        String geoJson = """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [-97.0403, 32.8998],
+                    "radius": 5.0
+                  },
+                  "properties": {
+                    "coreNOTAMData": {
+                      "notam": {
+                        "id": "N789",
+                        "number": "5/20",
+                        "type": "N",
+                        "icaoLocation": "KDFW",
+                        "issued": "2025-10-01T12:00:00Z",
+                        "radius": 10.0,
+                        "text": "Test with radius in both locations"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
+
+        assertEquals(1, notams.size());
+        // Should prioritize geometry radius over notam radius
+        assertEquals(5.0, notams.get(0).getRadiusNm());
+    }
+
+    @Test
+    void testParseWithConflictingRadiusValues() {
+        String geoJson = """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [-97.0403, 32.8998],
+                    "radius": 3.0
+                  },
+                  "properties": {
+                    "coreNOTAMData": {
+                      "notam": {
+                        "id": "N999",
+                        "number": "6/25",
+                        "type": "N",
+                        "icaoLocation": "KDFW",
+                        "issued": "2025-10-01T12:00:00Z",
+                        "radius": 7.0,
+                        "text": "Test with conflicting radius values"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
+
+        assertEquals(1, notams.size());
+        // Should prioritize geometry radius even when values conflict
+        assertEquals(3.0, notams.get(0).getRadiusNm());
     }
 
     @Test
@@ -282,12 +358,46 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
-        // Should still parse but with default coordinates (0, 0)
-        assertEquals(1, notams.size());
-        assertEquals(0.0, notams.get(0).getLatitude());
-        assertEquals(0.0, notams.get(0).getLongitude());
+        // Should skip NOTAMs with missing geometry instead of using (0,0) coordinates
+        // This prevents using a real location (Gulf of Guinea) as fallback data
+        assertEquals(0, notams.size());
+    }
+
+    @Test
+    void testParseInvalidCoordinateRanges() {
+        String geoJson = """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [200.0, 95.0]
+                  },
+                  "properties": {
+                    "coreNOTAMData": {
+                      "notam": {
+                        "id": "N789",
+                        "number": "4/20",
+                        "type": "N",
+                        "icaoLocation": "KDFW",
+                        "issued": "2025-10-01T12:00:00Z",
+                        "text": "Invalid coordinates"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
+
+        // Should skip NOTAMs with invalid coordinate ranges
+        assertEquals(0, notams.size());
     }
 
     @Test
@@ -349,7 +459,7 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         // Should parse 2 valid NOTAMs and skip the invalid one
         assertEquals(2, notams.size());
@@ -386,7 +496,7 @@ class NotamParserTest {
             }
             """;
 
-        List<Notam> notams = parser.parseGeoJson(geoJson);
+        final List<Notam> notams = parser.parseGeoJson(geoJson);
 
         assertEquals(1, notams.size());
         assertNotNull(notams.get(0).getIssued());

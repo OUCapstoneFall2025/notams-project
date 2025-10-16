@@ -1,6 +1,8 @@
 package ou.capstone.notams.api;
 
 import ou.capstone.notams.Notam;
+import ou.capstone.notams.route.RouteCalculator.Coordinate;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -57,7 +59,7 @@ public class NotamParser {
 
             logger.info("Found {} features in GeoJSON response", features.size());
 
-            List<Notam> notams = new ArrayList<>();
+            final List<Notam> notams = new ArrayList<>();
             int successfullyParsed = 0;
             int skipped = 0;
 
@@ -75,9 +77,12 @@ public class NotamParser {
                         skipped++;
                         logger.debug("Skipped feature {}: missing required fields", i + 1);
                     }
+                } catch (DateTimeParseException e) {
+                    skipped++;
+                    logger.warn("Failed to parse feature {} due to date parsing error: {}", i + 1, e.getMessage());
                 } catch (Exception e) {
                     skipped++;
-                    logger.warn("Failed to parse feature {}: {}", i + 1, e.getMessage());
+                    logger.warn("Failed to parse feature {} due to unexpected error: {}", i + 1, e.getMessage());
                 }
             }
 
@@ -85,8 +90,11 @@ public class NotamParser {
                         successfullyParsed, skipped);
             return notams;
 
-        } catch (Exception e) {
-            logger.error("Failed to parse GeoJSON response: {}", e.getMessage(), e);
+        } catch (JsonProcessingException e) {
+            logger.error("Failed to parse GeoJSON response due to JSON processing error: {}", e.getMessage(), e);
+            throw new IllegalArgumentException("Invalid GeoJSON response: " + e.getMessage(), e);
+        } catch (final Exception e) {
+            logger.error("Failed to parse GeoJSON response due to unexpected error: {}", e.getMessage(), e);
             throw new IllegalArgumentException("Invalid GeoJSON response: " + e.getMessage(), e);
         }
     }
@@ -96,55 +104,51 @@ public class NotamParser {
      * Extracts data from properties.coreNOTAMData.notam and geometry.
      * 
      * @param feature the GeoJSON feature object
-     * @return a Notam object, or null if required fields are missing
+     * @return a Notam object, or null if required fields are missing or parsing fails.
+     *         Returning null allows the main parser to skip invalid features and continue
+     *         processing other valid NOTAMs in the collection.
      */
     private Notam parseFeature(JsonNode feature) {
         try {
-            // Navigate to the coreNOTAMData.notam object
-            if (!feature.has("properties")) {
-                logger.debug("Feature missing 'properties' field");
+            // Navigate to the coreNOTAMData.notam object with cleaner validation
+            JsonNode notamData = navigateToNotamData(feature);
+            if (notamData == null) {
                 return null;
             }
 
-            JsonNode properties = feature.get("properties");
-            if (!properties.has("coreNOTAMData")) {
-                logger.debug("Properties missing 'coreNOTAMData' field");
+            // Extract required fields with validation
+            String id = extractRequiredField(notamData, "id");
+            String number = extractRequiredField(notamData, "number");
+            String issuedStr = extractRequiredField(notamData, "issued");
+            
+            if (id == null || number == null || issuedStr == null) {
+                logger.debug("Feature missing required fields - id: {}, number: {}, issued: {}", 
+                            id, number, issuedStr);
                 return null;
             }
 
-            JsonNode coreData = properties.get("coreNOTAMData");
-            if (!coreData.has("notam")) {
-                logger.debug("CoreNOTAMData missing 'notam' field");
-                return null;
-            }
-
-            JsonNode notamData = coreData.get("notam");
-
-            // Extract required fields
-            String id = notamData.has("id") ? notamData.get("id").asText() : null;
-            String number = notamData.has("number") ? notamData.get("number").asText() : null;
-            String type = notamData.has("type") ? notamData.get("type").asText() : "UNKNOWN";
-            String icaoLocation = notamData.has("icaoLocation") ? notamData.get("icaoLocation").asText() : "UNKNOWN";
-            String text = notamData.has("text") ? notamData.get("text").asText() : "";
-
-            // Issued timestamp
-            String issuedStr = notamData.has("issued") ? notamData.get("issued").asText() : null;
             OffsetDateTime issued = parseTimestamp(issuedStr);
+            if (issued == null) {
+                logger.debug("Failed to parse issued timestamp: {}", issuedStr);
+                return null;
+            }
+
+            // Extract optional fields with sensible defaults
+            String type = extractOptionalField(notamData, "type", "N");
+            String icaoLocation = extractOptionalField(notamData, "icaoLocation", null);
+            String text = extractOptionalField(notamData, "text", "");
 
             // Extract geometry (coordinates)
-            double[] coordinates = extractCoordinates(feature);
-            double latitude = coordinates[0];
-            double longitude = coordinates[1];
-
-            // Extract radius if available (geometry type might be circle or point with radius)
-            Double radiusNm = extractRadius(feature, coreData);
-
-            // Validate required fields
-            if (id == null || number == null || issued == null) {
-                logger.debug("Feature missing required fields - id: {}, number: {}, issued: {}", 
-                            id, number, issued);
+            Coordinate coordinates = extractCoordinates(feature);
+            if (coordinates == null) {
+                logger.debug("Feature has invalid/missing geometry, skipping NOTAM");
                 return null;
             }
+            double latitude = coordinates.latDeg;
+            double longitude = coordinates.lonDeg;
+
+            // Extract radius if available
+            Double radiusNm = extractRadius(feature, feature.get("properties").get("coreNOTAMData"));
 
             logger.debug("Parsed NOTAM - ID: {}, Number: {}, Type: {}, Location: {}", 
                         id, number, type, icaoLocation);
@@ -161,10 +165,70 @@ public class NotamParser {
                 text
             );
 
+        } catch (DateTimeParseException e) {
+            logger.warn("Error parsing feature due to date parsing error: {}", e.getMessage());
+            return null;
         } catch (Exception e) {
-            logger.warn("Error parsing feature: {}", e.getMessage());
+            logger.warn("Error parsing feature due to unexpected error: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Navigates to the notam data object with cleaner validation.
+     * 
+     * @param feature the GeoJSON feature object
+     * @return the notam JsonNode, or null if navigation fails
+     */
+    private JsonNode navigateToNotamData(JsonNode feature) {
+        if (!feature.has("properties")) {
+            logger.debug("Feature missing 'properties' field");
+            return null;
+        }
+
+        JsonNode properties = feature.get("properties");
+        if (!properties.has("coreNOTAMData")) {
+            logger.debug("Properties missing 'coreNOTAMData' field");
+            return null;
+        }
+
+        JsonNode coreData = properties.get("coreNOTAMData");
+        if (!coreData.has("notam")) {
+            logger.debug("CoreNOTAMData missing 'notam' field");
+            return null;
+        }
+
+        return coreData.get("notam");
+    }
+
+    /**
+     * Extracts a required field from the notam data.
+     * 
+     * @param notamData the notam JsonNode
+     * @param fieldName the field name to extract
+     * @return the field value as text, or null if missing
+     */
+    private String extractRequiredField(JsonNode notamData, String fieldName) {
+        if (!notamData.has(fieldName)) {
+            logger.debug("Missing required field: {}", fieldName);
+            return null;
+        }
+        return notamData.get(fieldName).asText();
+    }
+
+    /**
+     * Extracts an optional field from the notam data with a default value.
+     * 
+     * @param notamData the notam JsonNode
+     * @param fieldName the field name to extract
+     * @param defaultValue the default value if field is missing
+     * @return the field value as text, or the default value if missing
+     */
+    private String extractOptionalField(JsonNode notamData, String fieldName, String defaultValue) {
+        if (!notamData.has(fieldName)) {
+            return defaultValue;
+        }
+        return notamData.get(fieldName).asText();
     }
 
     /**
@@ -194,49 +258,87 @@ public class NotamParser {
      * Handles Point geometry type.
      * 
      * @param feature the GeoJSON feature object
-     * @return array of [latitude, longitude], defaults to [0.0, 0.0] if not found
+     * @return Coordinate object with latitude and longitude, or null if geometry is missing/invalid.
+     *         Returns null instead of (0.0, 0.0) to avoid using a real location (Gulf of Guinea)
+     *         as a fallback for missing data, which could be misleading for flight planning.
      */
-    private double[] extractCoordinates(JsonNode feature) {
+    private Coordinate extractCoordinates(JsonNode feature) {
         try {
             if (!feature.has("geometry")) {
-                logger.debug("Feature missing 'geometry' field, using default coordinates");
-                return new double[]{0.0, 0.0};
+                logger.warn("Feature missing 'geometry' field (required for coordinate extraction) - NOTAM will be skipped");
+                return null;
             }
 
             JsonNode geometry = feature.get("geometry");
-            String geometryType = geometry.has("type") ? geometry.get("type").asText() : "";
+            if (!geometry.has("type")) {
+                logger.warn("Geometry missing 'type' field - NOTAM will be skipped");
+                return null;
+            }
             
+            String geometryType = geometry.get("type").asText();
             if (!"Point".equals(geometryType)) {
-                logger.debug("Geometry type '{}' is not Point, using default coordinates", geometryType);
-                return new double[]{0.0, 0.0};
+                logger.warn("Geometry type '{}' is not supported (only 'Point' geometry is supported) - NOTAM will be skipped", 
+                           geometryType);
+                return null;
             }
 
             if (!geometry.has("coordinates")) {
-                logger.debug("Geometry missing 'coordinates' array");
-                return new double[]{0.0, 0.0};
+                logger.warn("Geometry missing 'coordinates' field (required for Point geometry) - NOTAM will be skipped");
+                return null;
             }
 
             JsonNode coords = geometry.get("coordinates");
-            if (coords.isArray() && coords.size() >= 2) {
-                // GeoJSON format is [longitude, latitude]
-                double longitude = coords.get(0).asDouble();
-                double latitude = coords.get(1).asDouble();
-                logger.debug("Extracted coordinates: lat={}, lon={}", latitude, longitude);
-                return new double[]{latitude, longitude};
+            if (!coords.isArray()) {
+                logger.warn("Geometry coordinates is not an array (type: {}) - NOTAM will be skipped", 
+                           coords.getNodeType());
+                return null;
+            }
+            
+            if (coords.size() < 2) {
+                logger.warn("Geometry coordinates array has {} elements, expected at least 2 - NOTAM will be skipped", 
+                           coords.size());
+                return null;
             }
 
-            logger.debug("Coordinates array has insufficient elements");
-            return new double[]{0.0, 0.0};
+            // GeoJSON format is [longitude, latitude]
+            double longitude = coords.get(0).asDouble();
+            double latitude = coords.get(1).asDouble();
+            
+            // Validate coordinate ranges
+            if (latitude < -90 || latitude > 90) {
+                logger.warn("Invalid latitude value: {} (must be between -90 and 90) - NOTAM will be skipped", 
+                           latitude);
+                return null;
+            }
+            
+            if (longitude < -180 || longitude > 180) {
+                logger.warn("Invalid longitude value: {} (must be between -180 and 180) - NOTAM will be skipped", 
+                           longitude);
+                return null;
+            }
+            
+            logger.debug("Extracted coordinates: lat={}, lon={}", latitude, longitude);
+            return new Coordinate(latitude, longitude);
 
+        } catch (ClassCastException e) {
+            logger.warn("Failed to extract coordinates due to type conversion error: {} - NOTAM will be skipped", 
+                       e.getMessage());
+            return null;
+        } catch (NumberFormatException e) {
+            logger.warn("Failed to extract coordinates due to number format error: {} - NOTAM will be skipped", 
+                       e.getMessage());
+            return null;
         } catch (Exception e) {
-            logger.warn("Error extracting coordinates: {}", e.getMessage());
-            return new double[]{0.0, 0.0};
+            logger.warn("Unexpected error extracting coordinates ({}): {} - NOTAM will be skipped", 
+                       e.getClass().getSimpleName(), e.getMessage());
+            return null;
         }
     }
 
     /**
      * Attempts to extract a radius value from the NOTAM data.
      * The radius might be in different places depending on the NOTAM structure.
+     * Priority: geometry radius takes precedence over notam data radius.
      * 
      * @param feature the GeoJSON feature object
      * @param coreData the coreNOTAMData object
@@ -247,13 +349,18 @@ public class NotamParser {
         // This is a best-effort extraction as the FAA API structure may vary
 
         try {
+            boolean hasGeometryRadius = false;
+            boolean hasNotamRadius = false;
+            Double geometryRadius = null;
+            Double notamRadius = null;
+
             // Check if there's a radius property in geometry
             if (feature.has("geometry")) {
                 JsonNode geometry = feature.get("geometry");
                 if (geometry.has("radius")) {
-                    double radius = geometry.get("radius").asDouble();
-                    logger.debug("Found radius in geometry: {} NM", radius);
-                    return radius;
+                    geometryRadius = geometry.get("radius").asDouble();
+                    hasGeometryRadius = true;
+                    logger.debug("Found radius in geometry: {} NM", geometryRadius);
                 }
             }
 
@@ -261,17 +368,36 @@ public class NotamParser {
             if (coreData.has("notam")) {
                 JsonNode notamData = coreData.get("notam");
                 if (notamData.has("radius")) {
-                    double radius = notamData.get("radius").asDouble();
-                    logger.debug("Found radius in notam data: {} NM", radius);
-                    return radius;
+                    notamRadius = notamData.get("radius").asDouble();
+                    hasNotamRadius = true;
+                    logger.debug("Found radius in notam data: {} NM", notamRadius);
                 }
+            }
+
+            // Handle case where radius appears in both locations
+            if (hasGeometryRadius && hasNotamRadius) {
+                if (Math.abs(geometryRadius - notamRadius) > 0.001) { // Allow for small floating point differences
+                    logger.warn("Conflicting radius values found: geometry={} NM, notam={} NM. Using geometry radius (geometry takes precedence).", 
+                               geometryRadius, notamRadius);
+                } else {
+                    logger.debug("Radius found in both locations with consistent values: {} NM (using geometry)", 
+                               geometryRadius);
+                }
+                return geometryRadius;
+            }
+
+            // Return the available radius
+            if (hasGeometryRadius) {
+                return geometryRadius;
+            } else if (hasNotamRadius) {
+                return notamRadius;
             }
 
             logger.debug("No radius found in NOTAM data");
             return null;
 
         } catch (Exception e) {
-            logger.debug("Error extracting radius: {}", e.getMessage());
+            logger.debug("Error extracting radius due to unexpected error: {}", e.getMessage());
             return null;
         }
     }
