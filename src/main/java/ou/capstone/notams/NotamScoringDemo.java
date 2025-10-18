@@ -19,24 +19,24 @@ public final class NotamScoringDemo {
         final Instant flightEnd   = now.plusSeconds(3 * 3600);   // ends in 3h
         final Set<String> keyAirports = new HashSet<>(Arrays.asList("KJFK", "KLAX"));
 
-        final List<Notam> notams = Arrays.asList(
-            new Notam("N1",  "KJFK", "RUNWAY CLOSED RWY 13L/31R",               2.0,  now.plusSeconds(1800),    now.plusSeconds(7200),    now.minusSeconds(3600)),
-            new Notam("N2",  "KJFK", "ILS OUT RWY 22R",                          8.0,  now.plusSeconds(2*3600),  now.plusSeconds(5*3600),  now.minusSeconds(30*3600)),
-            new Notam("N3",  "KLAX", "TAXIWAY CLOSED TWY B",                     1.0,  now.plusSeconds(3000),    now.plusSeconds(9000),    now.minusSeconds(2*3600)),
-            new Notam("N4",  "KSEA", "OBSTRUCTION CRANE 300FT AGL 12NM SW",     12.0,  now,                      now.plusSeconds(24*3600), now.minusSeconds(6*24*3600)),
-            new Notam("N5",  "KDEN", "TFR ACTIVE WITHIN 5NM OF VORTAC",         18.0,  now.plusSeconds(4000),    now.plusSeconds(10*3600), now.minusSeconds(4*3600)),
-            new Notam("N6",  "KDFW", "GENERAL ADVISORY: BIRD ACTIVITY",          6.0,  now.plusSeconds(86400),   now.plusSeconds(90000),   now.minusSeconds(10*24*3600)),
-            new Notam("N7",  "KLAX", "GPS UNAVAIL INTERMITTENT",                 4.0,  now.plusSeconds(2000),    now.plusSeconds(6000),    now.minusSeconds(20*3600)),
-            new Notam("N8",  "KPHX", "RUNWAY CLOSED RWY 08/26 OVERNIGHT",       22.0,  now.plusSeconds(8*3600),  now.plusSeconds(14*3600), now.minusSeconds(12*3600)),
-            new Notam("N9",  "KORD", "TWY CLSD TWY K BETWEEN K3-K5",             3.0,  now.plusSeconds(10000),   now.plusSeconds(20000),   now.minusSeconds(2*3600)),
-            new Notam("N10", "KBOS", "ADVISORY: WORK IN PROGRESS NE APRON",      2.0,  now.plusSeconds(20000),   now.plusSeconds(30000),   now.minusSeconds(50*3600))
+        final List<ScoredNotam> notams = Arrays.asList(
+            new ScoredNotam("N1",  "KJFK", "RUNWAY CLOSED RWY 13L/31R",               2.0,  now.plusSeconds(1800),    now.plusSeconds(7200),    now.minusSeconds(3600)),
+            new ScoredNotam("N2",  "KJFK", "ILS OUT RWY 22R",                          8.0,  now.plusSeconds(2*3600),  now.plusSeconds(5*3600),  now.minusSeconds(30*3600)),
+            new ScoredNotam("N3",  "KLAX", "TAXIWAY CLOSED TWY B",                     1.0,  now.plusSeconds(3000),    now.plusSeconds(9000),    now.minusSeconds(2*3600)),
+            new ScoredNotam("N4",  "KSEA", "OBSTRUCTION CRANE 300FT AGL 12NM SW",     12.0,  now,                      now.plusSeconds(24*3600), now.minusSeconds(6*24*3600)),
+            new ScoredNotam("N5",  "KDEN", "TFR ACTIVE WITHIN 5NM OF VORTAC",         18.0,  now.plusSeconds(4000),    now.plusSeconds(10*3600), now.minusSeconds(4*3600)),
+            new ScoredNotam("N6",  "KDFW", "GENERAL ADVISORY: BIRD ACTIVITY",          6.0,  now.plusSeconds(86400),   now.plusSeconds(90000),   now.minusSeconds(10*24*3600)),
+            new ScoredNotam("N7",  "KLAX", "GPS UNAVAIL INTERMITTENT",                 4.0,  now.plusSeconds(2000),    now.plusSeconds(6000),    now.minusSeconds(20*3600)),
+            new ScoredNotam("N8",  "KPHX", "RUNWAY CLOSED RWY 08/26 OVERNIGHT",       22.0,  now.plusSeconds(8*3600),  now.plusSeconds(14*3600), now.minusSeconds(12*3600)),
+            new ScoredNotam("N9",  "KORD", "TWY CLSD TWY K BETWEEN K3-K5",             3.0,  now.plusSeconds(10000),   now.plusSeconds(20000),   now.minusSeconds(2*3600)),
+            new ScoredNotam("N10", "KBOS", "ADVISORY: WORK IN PROGRESS NE APRON",      2.0,  now.plusSeconds(20000),   now.plusSeconds(30000),   now.minusSeconds(50*3600))
         );
 
         final Scorer scorer = new Scorer();
 
         // Compute scores once and reuse
         final List<Result> results = new ArrayList<>(notams.size());
-        for (final Notam n : notams) {
+        for (final ScoredNotam n : notams) {
             final int s = scorer.score(n, flightStart, flightEnd, keyAirports);
             results.add(new Result(n, s));
         }
@@ -68,12 +68,12 @@ public final class NotamScoringDemo {
         }
     }
 
-    private static String toDisplayString(final Notam n, final int score) {
-        final String apt = (n.airport == null) ? "-" : n.airport;
-        final String rawText = (n.text == null) ? "" : n.text;
+    private static String toDisplayString(final ScoredNotam n, final int score) {
+        final String apt = (n.getAirport() == null) ? "-" : n.getAirport();
+        final String rawText = (n.getText() == null) ? "" : n.getText();
         // Using string format pattern
         final String shortText = String.format(Locale.ROOT, "%.60s", rawText);
-        return String.format(Locale.ROOT, "%-5s %-6s %6d %s", n.id, apt, score, shortText);
+        return String.format(Locale.ROOT, "%-5s %-6s %6d %s", n.getId(), apt, score, shortText);
     }
 
 
@@ -86,46 +86,62 @@ public final class NotamScoringDemo {
 
     /** Holder for NOTAM + its score. */
     private static final class Result {
-        final Notam notam;
+        final ScoredNotam notam;
         final int score;
-        Result(final Notam notam, final int score) { this.notam = notam; this.score = score; }
+        Result(final ScoredNotam notam, final int score) { this.notam = notam; this.score = score; }
     }
 
-    /** Temp NOTAM class for this demo. Replace later with CCS-33 (Ticket made) */
-    static final class Notam {
-        final String id;
-        final String airport;     // ICAO
-        final String text;
-        final Double distanceNm;  // to route/airport
-        final Instant startTime;
-        final Instant endTime;
-        final Instant issuedTime;
+    /** Wrapper class that uses the official CCS-33 Notam class with additional scoring fields */
+    static final class ScoredNotam {
+        private final Notam baseNotam;  // Official CCS-33 Notam class
+        private final Double distanceNm;  // Additional field for scoring
+        private final Instant startTime;  // Additional field for scoring
+        private final Instant endTime;    // Additional field for scoring
+        private final Instant issuedTime; // Additional field for scoring
 
-        Notam(final String id, final String airport, final String text, final Double distanceNm,
-              final Instant startTime, final Instant endTime, final Instant issuedTime) {
-            this.id = id;
-            this.airport = airport;
-            this.text = text;
+        ScoredNotam(final String id, final String airport, final String text, final Double distanceNm,
+                    final Instant startTime, final Instant endTime, final Instant issuedTime) {
+            // Create the official CCS-33 Notam object with available fields
+            this.baseNotam = new Notam(
+                id,
+                "N/A", // number - not available in demo data
+                "DEMO", // type - not available in demo data  
+                issuedTime != null ? issuedTime.atOffset(java.time.ZoneOffset.UTC) : null,
+                airport,
+                0.0, // latitude - not available in demo data
+                0.0, // longitude - not available in demo data
+                distanceNm, // radiusNm - using distanceNm as radius
+                text
+            );
             this.distanceNm = distanceNm;
             this.startTime = startTime;
             this.endTime = endTime;
             this.issuedTime = issuedTime;
         }
+
+        // Delegate to the official Notam class for basic properties
+        public String getId() { return baseNotam.getId(); }
+        public String getAirport() { return baseNotam.getLocation(); }
+        public String getText() { return baseNotam.getText(); }
+        public Double getDistanceNm() { return distanceNm; }
+        public Instant getStartTime() { return startTime; }
+        public Instant getEndTime() { return endTime; }
+        public Instant getIssuedTime() { return issuedTime; }
     }
 
     
     static final class Scorer {
 
-        int score(final Notam notam,
+        int score(final ScoredNotam notam,
                   final Instant flightStart,
                   final Instant flightEnd,
                   final Set<String> keyAirports) {
             final int total =
-                    impact(notam.text) +
-                    proximity(notam.distanceNm) +
-                    timeOverlap(notam.startTime, notam.endTime, flightStart, flightEnd) +
-                    freshness(notam.issuedTime) +
-                    keyAirport(notam.airport, keyAirports);
+                    impact(notam.getText()) +
+                    proximity(notam.getDistanceNm()) +
+                    timeOverlap(notam.getStartTime(), notam.getEndTime(), flightStart, flightEnd) +
+                    freshness(notam.getIssuedTime()) +
+                    keyAirport(notam.getAirport(), keyAirports);
             return Math.min(100, Math.max(0, total));
         }
 
