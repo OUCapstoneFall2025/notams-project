@@ -8,8 +8,8 @@ import java.util.Locale;
  */
 public final class Coordinate {
 
-    private final double latDeg;
-    private final double lonDeg;
+    public final double latDeg;
+    public final double lonDeg;
 
     /**
      * Constructs a Coordinate object with validation.
