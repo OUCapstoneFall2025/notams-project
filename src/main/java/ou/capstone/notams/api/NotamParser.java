@@ -1,7 +1,7 @@
 package ou.capstone.notams.api;
 
 import ou.capstone.notams.Notam;
-import ou.capstone.notams.route.RouteCalculator.Coordinate;
+import ou.capstone.notams.route.Coordinate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +35,8 @@ public class NotamParser {
     public List<Notam> parseGeoJson(String geoJsonResponse) {
         logger.info("Starting GeoJSON parsing");
 
+        logger.info("API Response preview: {}", geoJsonResponse.substring(0, Math.min(200, geoJsonResponse.length())));
+
         if (geoJsonResponse == null || geoJsonResponse.trim().isEmpty()) {
             logger.warn("Empty or null GeoJSON response provided");
             return new ArrayList<>();
@@ -46,27 +48,27 @@ public class NotamParser {
             JsonNode root = objectMapper.readTree(geoJsonResponse);
             logger.debug("Successfully parsed root JSON object");
 
-            if (!root.has("features")) {
-                logger.warn("GeoJSON response missing 'features' array");
+            if (!root.has("items")) {
+                logger.warn("GeoJSON response missing 'items' array");
                 return new ArrayList<>();
             }
 
-            JsonNode features = root.get("features");
-            if (!features.isArray()) {
-                logger.warn("'features' is not an array");
+            JsonNode items = root.get("items");
+            if (!items.isArray()) {
+                logger.warn("'items' is not an array");
                 return new ArrayList<>();
             }
 
-            logger.info("Found {} features in GeoJSON response", features.size());
+            logger.info("Found {} items in GeoJSON response", items.size());
 
             final List<Notam> notams = new ArrayList<>();
             int successfullyParsed = 0;
             int skipped = 0;
 
-            for (int i = 0; i < features.size(); i++) {
+            for (int i = 0; i < items.size(); i++) {
                 try {
-                    JsonNode feature = features.get(i);
-                    logger.debug("Processing feature {}/{}", i + 1, features.size());
+                    JsonNode feature = items.get(i);
+                    logger.debug("Processing feature {}/{}", i + 1, items.size());
 
                     Notam notam = parseFeature(feature);
                     if (notam != null) {
@@ -105,7 +107,7 @@ public class NotamParser {
      * 
      * @param feature the GeoJSON feature object
      * @return a Notam object, or null if required fields are missing or parsing fails.
-     *         Returning null allows the main parser to skip invalid features and continue
+     *         Returning null allows the main parser to skip invalid items and continue
      *         processing other valid NOTAMs in the collection.
      */
     private Notam parseFeature(JsonNode feature) {
@@ -255,12 +257,11 @@ public class NotamParser {
 
     /**
      * Extracts coordinates from the geometry field.
-     * Handles Point geometry type.
-     * 
+     * Handles both Point and GeometryCollection geometry types.
+     * For GeometryCollection, extracts coordinates from the first Point geometry found.
+     *
      * @param feature the GeoJSON feature object
      * @return Coordinate object with latitude and longitude, or null if geometry is missing/invalid.
-     *         Returns null instead of (0.0, 0.0) to avoid using a real location (Gulf of Guinea)
-     *         as a fallback for missing data, which could be misleading for flight planning.
      */
     private Coordinate extractCoordinates(JsonNode feature) {
         try {
@@ -274,65 +275,136 @@ public class NotamParser {
                 logger.warn("Geometry missing 'type' field - NOTAM will be skipped");
                 return null;
             }
-            
+
             String geometryType = geometry.get("type").asText();
-            if (!"Point".equals(geometryType)) {
-                logger.warn("Geometry type '{}' is not supported (only 'Point' geometry is supported) - NOTAM will be skipped", 
-                           geometryType);
-                return null;
+
+            // Handle Point geometry
+            if ("Point".equals(geometryType)) {
+                return extractPointCoordinates(geometry);
             }
 
-            if (!geometry.has("coordinates")) {
-                logger.warn("Geometry missing 'coordinates' field (required for Point geometry) - NOTAM will be skipped");
-                return null;
+            // Handle GeometryCollection
+            if ("GeometryCollection".equals(geometryType)) {
+                return extractGeometryCollectionCoordinates(geometry);
             }
 
-            JsonNode coords = geometry.get("coordinates");
-            if (!coords.isArray()) {
-                logger.warn("Geometry coordinates is not an array (type: {}) - NOTAM will be skipped", 
-                           coords.getNodeType());
-                return null;
-            }
-            
-            if (coords.size() < 2) {
-                logger.warn("Geometry coordinates array has {} elements, expected at least 2 - NOTAM will be skipped", 
-                           coords.size());
-                return null;
-            }
-
-            // GeoJSON format is [longitude, latitude]
-            double longitude = coords.get(0).asDouble();
-            double latitude = coords.get(1).asDouble();
-            
-            // Validate coordinate ranges
-            if (latitude < -90 || latitude > 90) {
-                logger.warn("Invalid latitude value: {} (must be between -90 and 90) - NOTAM will be skipped", 
-                           latitude);
-                return null;
-            }
-            
-            if (longitude < -180 || longitude > 180) {
-                logger.warn("Invalid longitude value: {} (must be between -180 and 180) - NOTAM will be skipped", 
-                           longitude);
-                return null;
-            }
-            
-            logger.debug("Extracted coordinates: lat={}, lon={}", latitude, longitude);
-            return new Coordinate(latitude, longitude);
+            logger.warn("Geometry type '{}' is not supported (only 'Point' and 'GeometryCollection' are supported) - NOTAM will be skipped",
+                    geometryType);
+            return null;
 
         } catch (ClassCastException e) {
-            logger.warn("Failed to extract coordinates due to type conversion error: {} - NOTAM will be skipped", 
-                       e.getMessage());
+            logger.warn("Failed to extract coordinates due to type conversion error: {} - NOTAM will be skipped",
+                    e.getMessage());
             return null;
         } catch (NumberFormatException e) {
-            logger.warn("Failed to extract coordinates due to number format error: {} - NOTAM will be skipped", 
-                       e.getMessage());
+            logger.warn("Failed to extract coordinates due to number format error: {} - NOTAM will be skipped",
+                    e.getMessage());
             return null;
         } catch (Exception e) {
-            logger.warn("Unexpected error extracting coordinates ({}): {} - NOTAM will be skipped", 
-                       e.getClass().getSimpleName(), e.getMessage());
+            logger.warn("Unexpected error extracting coordinates ({}): {} - NOTAM will be skipped",
+                    e.getClass().getSimpleName(), e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Extracts coordinates from a Point geometry.
+     *
+     * @param geometry the geometry JsonNode (must be type "Point")
+     * @return Coordinate object, or null if extraction fails
+     */
+    private Coordinate extractPointCoordinates(JsonNode geometry) {
+        if (!geometry.has("coordinates")) {
+            logger.warn("Point geometry missing 'coordinates' field - NOTAM will be skipped");
+            return null;
+        }
+
+        JsonNode coords = geometry.get("coordinates");
+        if (!coords.isArray()) {
+            logger.warn("Point geometry coordinates is not an array - NOTAM will be skipped");
+            return null;
+        }
+
+        if (coords.size() < 2) {
+            logger.warn("Point geometry coordinates array has {} elements, expected at least 2 - NOTAM will be skipped",
+                    coords.size());
+            return null;
+        }
+
+        // GeoJSON format is [longitude, latitude]
+        double longitude = coords.get(0).asDouble();
+        double latitude = coords.get(1).asDouble();
+
+        return validateAndCreateCoordinate(latitude, longitude);
+    }
+
+    /**
+     * Extracts coordinates from a GeometryCollection.
+     * Searches for the first Point geometry in the collection and extracts its coordinates.
+     *
+     * @param geometry the geometry JsonNode (must be type "GeometryCollection")
+     * @return Coordinate object from first Point found, or null if no valid Point exists
+     */
+    private Coordinate extractGeometryCollectionCoordinates(JsonNode geometry) {
+        if (!geometry.has("geometries")) {
+            logger.warn("GeometryCollection missing 'geometries' array - NOTAM will be skipped");
+            return null;
+        }
+
+        JsonNode geometries = geometry.get("geometries");
+        if (!geometries.isArray()) {
+            logger.warn("GeometryCollection 'geometries' is not an array - NOTAM will be skipped");
+            return null;
+        }
+
+        if (geometries.isEmpty()) {
+            logger.warn("GeometryCollection has empty 'geometries' array - NOTAM will be skipped");
+            return null;
+        }
+
+        // Find the first Point geometry in the collection
+        for (int i = 0; i < geometries.size(); i++) {
+            JsonNode geom = geometries.get(i);
+
+            if (!geom.has("type")) {
+                continue;
+            }
+
+            String geomType = geom.get("type").asText();
+
+            if ("Point".equals(geomType)) {
+                logger.debug("Found Point geometry at index {} in GeometryCollection", i);
+                return extractPointCoordinates(geom);
+            }
+        }
+
+        logger.warn("GeometryCollection contains no Point geometry - NOTAM will be skipped");
+        return null;
+    }
+
+    /**
+     * Validates coordinate ranges and creates a Coordinate object.
+     *
+     * @param latitude latitude in degrees
+     * @param longitude longitude in degrees
+     * @return Coordinate object, or null if validation fails
+     */
+    private Coordinate validateAndCreateCoordinate(double latitude, double longitude) {
+        // Validate coordinate ranges
+        if (latitude < -90 || latitude > 90) {
+            logger.warn("Invalid latitude value: {} (must be between -90 and 90) - NOTAM will be skipped",
+                    latitude);
+            return null;
+        }
+
+        if (longitude < -180 || longitude > 180) {
+            logger.warn("Invalid longitude value: {} (must be between -180 and 180) - NOTAM will be skipped",
+                    longitude);
+            return null;
+        }
+
+        logger.debug("Extracted coordinates: lat={}, lon={}", latitude, longitude);
+        return new Coordinate(latitude, longitude);
     }
 
     /**
