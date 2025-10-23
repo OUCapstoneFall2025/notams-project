@@ -2,6 +2,7 @@ package ou.capstone.notams.api;
 
 import ou.capstone.notams.route.RouteCalculator;
 import ou.capstone.notams.route.Coordinate;
+import ou.capstone.notams.validation.AirportDirectory;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -11,7 +12,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Fetches raw NOTAM data from the FAA API for given routes and airports.
@@ -24,6 +24,7 @@ public class NotamFetcher {
     private final String clientId;
     private final String clientSecret;
     private final HttpClient httpClient;
+    private final AirportDirectory airportDirectory;
     
     // Radius in nautical miles for location queries
     private static final int QUERY_RADIUS_NM = 50;
@@ -46,24 +47,22 @@ public class NotamFetcher {
         }
         
         this.httpClient = HttpClient.newHttpClient();
+        this.airportDirectory = new AirportDirectory();
     }
     
     /**
      * Fetch raw NOTAM JSON data for a flight route between two airports.
      * Queries along the great-circle route using waypoints.
      *
-     * @param departureIcao ICAO code of the departure airport
-     * @param destinationIcao ICAO code of the destination airport
-     * @return List of raw NOTAM API response strings for each waypoint
-     * @throws Exception if API call fails or airport code is unknown
-     * @see #fetchForLocation(double, double, int)
+     * @param departureCode IATA or ICAO code of the departure airport
+     * @param destinationCode IATA or ICAO code of the destination airport
      */
-    public List<String> fetchForRoute(String departureIcao, String destinationIcao) 
+     public List<String> fetchForRoute(String departureCode, String destinationCode)
             throws Exception {
         
         // Get coordinates for departure and destination
-        double[] depCoords = getAirportCoordinates(departureIcao);
-        double[] destCoords = getAirportCoordinates(destinationIcao);
+        double[] depCoords = getAirportCoordinates(departureCode);
+        double[] destCoords = getAirportCoordinates(destinationCode);
         
         // Calculate waypoints along the route
         List<Coordinate> waypoints = RouteCalculator.getRouteWaypoints(
@@ -127,35 +126,20 @@ public class NotamFetcher {
         
         return response.body();
     }
-    
+
     /**
-     * Get airport coordinates.
-     * Uses a static map for lookup; extend as needed.
-     * TODO: Replace with airport database lookup (future ticket)
-     */
-    private static final Map<String, double[]> AIRPORT_COORDS = new java.util.HashMap<>();
-    static {
-        AIRPORT_COORDS.put("KOKC", new double[]{35.3931, -97.6007});
-        AIRPORT_COORDS.put("KDFW", new double[]{32.8998, -97.0403});
-        AIRPORT_COORDS.put("KJFK", new double[]{40.6413, -73.7781});
-        AIRPORT_COORDS.put("KLAX", new double[]{33.9416, -118.4085});
-        AIRPORT_COORDS.put("KORD", new double[]{41.9742, -87.9073});
-        AIRPORT_COORDS.put("KATL", new double[]{33.6407, -84.4277});
-    }
-    /**
-     * Retrieves the latitude and longitude coordinates for a given airport ICAO code.
-     * Throws IllegalArgumentException if the ICAO code is not found in the static map.
+     * Retrieves the latitude and longitude coordinates for a given airport code.
+     * Accepts both IATA (3-letter) and ICAO (4-letter) codes.
+     * Uses the AirportDirectory to look up coordinates from the airport CSV database.
      *
-     * @param icaoCode the ICAO code of the airport
+     * @param airportCode the IATA or ICAO code of the airport
      * @return an array containing latitude and longitude as [lat, lon]
-     * @throws IllegalArgumentException if the ICAO code is unknown
-     * @see AIRPORT_COORDS
-     * TODO: Replace with airport database lookup (future ticket)
+     * @throws IllegalArgumentException if the airport code is not found
      */
-    private static double[] getAirportCoordinates(String icaoCode) {
-        double[] coords = AIRPORT_COORDS.get(icaoCode);
+    private double[] getAirportCoordinates(String airportCode) {
+        double[] coords = airportDirectory.getCoordinates(airportCode);
         if (coords == null) {
-            throw new IllegalArgumentException("Unknown airport: " + icaoCode);
+            throw new IllegalArgumentException("Unknown airport: " + airportCode);
         }
         return coords;
     }
