@@ -41,7 +41,7 @@ public class RouteCalculator {
         logger.debug("Calculating great-circle distance between ({}, {}) and ({}, {})", 
                      lat1Deg, lon1Deg, lat2Deg, lon2Deg);
         double distance = R_NM * centralAngleRad(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
-        logger.debug("Calculated distance: {:.2f} nautical miles", distance);
+        logger.debug("Calculated distance: {} nautical miles", distance);
         return distance;
     }
 
@@ -120,9 +120,9 @@ public class RouteCalculator {
         
         double totalNm = distanceNm(lat1Deg, lon1Deg, lat2Deg, lon2Deg);
         int segments = Math.max(1, (int) Math.ceil(totalNm / spacingNm));
-        
-        logger.info("Total route distance: {:.2f} NM, calculated {} segments for {} NM spacing", 
-                    totalNm, segments, spacingNm);
+
+        logger.info("Total route distance: {} NM, calculated {} segments for {} NM spacing",
+                totalNm, segments, spacingNm);
         
         List<Coordinate> waypoints = interpolateRoute(lat1Deg, lon1Deg, lat2Deg, lon2Deg, segments);
         logger.info("Generated {} waypoints for route", waypoints.size());
