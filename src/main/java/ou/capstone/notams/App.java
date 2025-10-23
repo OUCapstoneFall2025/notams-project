@@ -60,11 +60,14 @@ public final class App {
                 System.exit(1);
             }
 
+            // Step 3: Use validated airports to fetch NOTAMs
             logger.info("Airports validated");
+            final String validatedDepartureCode = getCodeFromValidation(departureResult);
+            final String validatedDestinationCode = getCodeFromValidation(destinationResult);
 
-            // Step 3: Fetch NOTAMs (delegated to NotamFetcher)
+            logger.info("Using validated codes for API: {} to {}", validatedDepartureCode, validatedDestinationCode);
             final NotamFetcher fetcher = new NotamFetcher();
-            final List<String> apiResponses = fetcher.fetchForRoute(departureCode, destinationCode);
+            final List<String> apiResponses = fetcher.fetchForRoute(validatedDepartureCode, validatedDestinationCode);
 
             logger.info("Fetched {} API responses", apiResponses.size());
 
@@ -229,5 +232,20 @@ public final class App {
             this.notam = notam;
             this.score = score;
         }
+    }
+
+    /**
+     * Extracts the airport code from a ValidationResult.
+     * If the result contains an ICAO code, returns it.
+     * If the result contains an IATA code, returns it (may need conversion for API).
+     *
+     * @param result the validation result
+     * @return the airport code
+     */
+    private static String getCodeFromValidation(final ValidationResult result) {
+        if (!result.isOk() || !result.airport().isPresent()) {
+            throw new IllegalStateException("Cannot extract code from invalid validation result");
+        }
+        return result.airport().get().code();
     }
 }
