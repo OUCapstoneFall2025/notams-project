@@ -24,15 +24,15 @@ final class NotamScoringDemoTest {
 
         final NotamScoringDemo.Scorer scorer = new NotamScoringDemo.Scorer();
 
-        final NotamScoringDemo.Notam closure = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam closure = new NotamScoringDemo.ScoredNotam(
             "N1","KJFK","RUNWAY CLOSED RWY 13L/31R", 2.0,
             now.plusSeconds(1800), now.plusSeconds(7200), now.minusSeconds(3600));
 
-        final NotamScoringDemo.Notam vorOut = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam vorOut = new NotamScoringDemo.ScoredNotam(
             "N2","KJFK","VOR OUT OF SERVICE", 8.0,
             now.plusSeconds(7200), now.plusSeconds(5*3600), now.minusSeconds(30*3600));
 
-        final NotamScoringDemo.Notam apron = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam apron = new NotamScoringDemo.ScoredNotam(
             "N3","KDEN","ADVISORY APRON WORK", 22.0,
             now.plusSeconds(20000), now.plusSeconds(30000), now.minusSeconds(50*3600));
 
@@ -51,9 +51,9 @@ final class NotamScoringDemoTest {
         final Instant arr = now.plusSeconds(3 * 3600);
         final NotamScoringDemo.Scorer scorer = new NotamScoringDemo.Scorer();
 
-        final NotamScoringDemo.Notam atKey = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam atKey = new NotamScoringDemo.ScoredNotam(
             "K","KJFK","ADVISORY", 2.0, dep, arr, now.minusSeconds(1000));
-        final NotamScoringDemo.Notam notKey = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam notKey = new NotamScoringDemo.ScoredNotam(
             "N","KSEA","ADVISORY", 2.0, dep, arr, now.minusSeconds(1000));
 
         final int sKey = scorer.score(atKey, dep, arr, keys());
@@ -69,7 +69,7 @@ final class NotamScoringDemoTest {
         final NotamScoringDemo.Scorer scorer = new NotamScoringDemo.Scorer();
 
        
-        final NotamScoringDemo.Notam before = new NotamScoringDemo.Notam(
+        final NotamScoringDemo.ScoredNotam before = new NotamScoringDemo.ScoredNotam(
             "B", "KSEA", "ADVISORY", 25.0,
             now.minusSeconds(7200),   // NOTAM ends 2h before dep
             now.minusSeconds(3600),   // NOTAM ends 1h before dep
