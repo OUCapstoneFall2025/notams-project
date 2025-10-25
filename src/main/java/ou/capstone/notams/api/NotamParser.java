@@ -12,10 +12,14 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Parses FAA GeoJSON responses and converts them into Notam objects.
  * CCS-31: Responsible for extracting key NOTAM properties from API responses.
+ * CCS-32: Deduplicates parsed NOTAMs prior to returning.
  */
 public class NotamParser {
     private static final Logger logger = LoggerFactory.getLogger(NotamParser.class);
@@ -90,7 +94,13 @@ public class NotamParser {
 
             logger.info("Parsing complete: {} NOTAMs parsed successfully, {} skipped", 
                         successfullyParsed, skipped);
-            return notams;
+          
+  // CCS-32 Deduplication 
+            
+         List<Notam> unique = dedupeNotams(notams);
+            logger.info("Deduplication complete: {} unique NOTAMs ({} removed as duplicates)",
+                    unique.size(), notams.size() - unique.size());
+            return unique;
 
         } catch (JsonProcessingException e) {
             logger.error("Failed to parse GeoJSON response due to JSON processing error: {}", e.getMessage(), e);
@@ -473,5 +483,102 @@ public class NotamParser {
             return null;
         }
     }
-}
 
+ // CCS-32: Deduplication -----------------
+    
+
+    private static final Pattern WS = Pattern.compile("\\s+");
+
+    /** Remove duplicates */
+    private List<Notam> dedupeNotams(final List<Notam> in) {
+        if (in == null || in.isEmpty()) return in;
+
+        final Map<String, Notam> byKey = new LinkedHashMap<>();
+        for (Notam n : in) {
+            if (n == null) continue;
+            final String key = dedupeKey(n);
+            final Notam existing = byKey.get(key);
+            if (existing == null) {
+                byKey.put(key, n);
+            } else if (prefer(n, existing)) {
+                byKey.put(key, n);
+            }
+        }
+        return new ArrayList<>(byKey.values());
+    }
+
+    /** Compute a stable deduplication key */
+    private String dedupeKey(final Notam n) {
+        // 1) Strongest: unique ID
+        if (safeHas(n.getId())) {
+            return "ID|" + n.getId().trim();
+        }
+
+        // 2) Common: NOTAM number + location + issued to the minute 
+        final String number = nz(n.getNumber());
+        final String icao   = nz(n.getLocation());
+        final String issuedMinute = n.getIssued() == null ? "" : n.getIssued().withSecond(0).withNano(0).toString();
+        if (!number.isEmpty() || !icao.isEmpty() || !issuedMinute.isEmpty()) {
+            return "NUMLOCISS|" + number + "|" + icao + "|" + issuedMinute;
+        }
+
+        // 3) Fallback: text hash + quantized geometry (+ radius if present)
+        final String textNorm = normalizeText(nz(n.getText()));
+        final int textHash = textNorm.isEmpty() ? 0 : textNorm.hashCode();
+
+        final String geo = quantize(n.getLatitude()) + "," + quantize(n.getLongitude());
+        final String r = n.getRadiusNm() == null ? "" : String.format("%.1f", n.getRadiusNm());
+
+        return "TXTGEO|" + textHash + "|" + geo + "|" + r;
+    }
+
+    private boolean safeHas(String s) { return s != null && !s.isBlank(); }
+    private String nz(String s) { return s == null ? "" : s; }
+
+    private String normalizeText(String s) {
+        // Uppercase, collapse whitespace
+        String t = s.trim().toUpperCase();
+        t = WS.matcher(t).replaceAll(" ");
+        return t;
+    }
+
+    /** Quantize degrees to ~0.01 degree to avoid tiny float drift. */
+    private String quantize(double d) {
+        return String.format("%.2f", d);
+    }
+
+    /** Decide which NOTAM to keep */
+    private boolean prefer(final Notam candidate, final Notam current) {
+        // 1) Prefer newer 
+        if (candidate.getIssued() != null && current.getIssued() != null) {
+            int cmp = candidate.getIssued().compareTo(current.getIssued());
+            if (cmp != 0) return cmp > 0;
+        } else if (candidate.getIssued() != null) {
+            return true; // has timestamp vs none
+        } else if (current.getIssued() != null) {
+            return false;
+        }
+
+        // 2) Prefer one with valid geometry (lat/lon present, NaN-safe)
+        boolean candHasGeo = hasGeo(candidate);
+        boolean currHasGeo = hasGeo(current);
+        if (candHasGeo != currHasGeo) return candHasGeo;
+
+        // 3) Prefer one that has radius
+        boolean candHasR = candidate.getRadiusNm() != null;
+        boolean currHasR = current.getRadiusNm() != null;
+        if (candHasR != currHasR) return candHasR;
+
+        // 4) Prefer longer text
+        int candLen = nz(candidate.getText()).length();
+        int currLen = nz(current.getText()).length();
+        if (candLen != currLen) return candLen > currLen;
+
+        // 5) Stable fallback: keep existing
+        return false;
+    }
+
+    private boolean hasGeo(Notam n) {
+    	        return !Double.isNaN(n.getLatitude()) && !Double.isNaN(n.getLongitude());
+    	    }
+    	}
