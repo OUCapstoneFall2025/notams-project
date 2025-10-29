@@ -71,6 +71,19 @@ public class NotamFetcher {
             destCoords[0], destCoords[1],
             WAYPOINT_SPACING_NM
         );
+
+        // Route verification logging
+        System.out.println("\n=== ROUTE VERIFICATION ===");
+        System.out.println("\nGoogle Maps URL (copy and paste to verify route):");
+
+        StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
+        for (Coordinate waypoint : waypoints) {
+            mapsUrl.append(waypoint.getLatitude()).append(",")
+                .append(waypoint.getLongitude()).append("/");
+        }
+        System.out.println(mapsUrl.toString());
+        System.out.println("===================================\n");
+
         
         List<String> responses = new ArrayList<>();
         
