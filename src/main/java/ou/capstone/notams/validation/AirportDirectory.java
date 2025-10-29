@@ -1,5 +1,6 @@
 package ou.capstone.notams.validation;
 
+import ou.capstone.notams.route.Coordinate;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,7 +17,7 @@ import java.util.Optional;
  * Resource location: src/main/resources/data/us-airports.csv
  * Accessed via classpath (portable across OS/JARs): "/data/us-airports.csv"
  */
-class AirportDirectory { //  not public/final
+public class AirportDirectory { //  changed to public so that NotamFetcher can use
 
     /** Nullable fields allowed where data may be missing. */
     private static final class AirportRecord {
@@ -51,11 +52,12 @@ class AirportDirectory { //  not public/final
     private final Map<String, AirportRecord> byNameNormalized = new HashMap<>();
     private final List<AirportRecord> allRows = new ArrayList<>();
 
-    AirportDirectory() {
-        loadCsv(RESOURCE_PATH); // classpath-absolute (NOT an OS path)
+    public AirportDirectory() {
+        loadCsv(); // classpath-absolute (NOT an OS path)
     }
 
-    private void loadCsv(String resourcePath) {
+    private void loadCsv() {
+        String resourcePath = RESOURCE_PATH;
         InputStream is = AirportDirectory.class.getResourceAsStream(resourcePath);
         if (is == null) {
             throw new IllegalStateException(
@@ -72,7 +74,7 @@ class AirportDirectory { //  not public/final
             if (headerLine == null) throw new IOException("Empty CSV: " + resourcePath);
 
             // Strip BOM if present
-            if (!headerLine.isEmpty() && headerLine.charAt(0) == '\uFEFF') headerLine = headerLine.substring(1);
+            if (headerLine.charAt(0) == '\uFEFF') headerLine = headerLine.substring(1);
 
             List<String> header = parseCsvLine(headerLine);
             Map<String, Integer> idx = indexHeader(header);
@@ -164,7 +166,68 @@ class AirportDirectory { //  not public/final
         return out;
     }
 
-    // ---- helpers ----
+    /**
+     * Get airport coordinates by IATA or ICAO code.
+     * Tries both lookups automatically.
+     *
+     * @param code IATA or ICAO code
+     * @return [latitude, longitude] or null if not found
+     */
+    public Optional<Coordinate> getCoordinates(String code) {
+        if (code == null || code.isBlank()) return Optional.empty();
+
+        String upper = code.toUpperCase(Locale.ROOT);
+        AirportRecord r = null;
+
+        // Try IATA first (3 letters)
+        if (upper.length() == 3) {
+            r = byIata.get(upper);
+        }
+
+        // Try ICAO if not found (4 letters)
+        if (r == null && upper.length() == 4) {
+            r = byIcao.get(upper);
+        }
+
+        // Try the other way if still not found
+        if (r == null) {
+            r = byIcao.get(upper);
+            if (r == null) {
+                r = byIata.get(upper);
+            }
+        }
+
+        if (r == null || Double.isNaN(r.latitude) || Double.isNaN(r.longitude)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new Coordinate(r.latitude, r.longitude));
+    }
+    /**
+     * Get ICAO code for any input (IATA or ICAO).
+     * Returns the ICAO code if available, otherwise null.
+     *
+     * @param code IATA or ICAO code
+     * @return ICAO code or null if not found
+     */
+    public String getIcaoCode(String code) {
+        if (code == null || code.isBlank()) return null;
+
+        String upper = code.toUpperCase(Locale.ROOT);
+        AirportRecord r = null;
+
+        // Try IATA first
+        if (upper.length() == 3) {
+            r = byIata.get(upper);
+        }
+
+        // Try ICAO
+        if (r == null) {
+            r = byIcao.get(upper);
+        }
+
+        return (r != null) ? r.icaoCode : null;
+    }
 
     private static String normalizeName(String s) {
         return (s == null ? "" : s).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
