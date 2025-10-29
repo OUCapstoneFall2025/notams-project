@@ -1,5 +1,12 @@
 package ou.capstone.notams.api;
 
+import ou.capstone.notams.route.RouteCalculator;
+import ou.capstone.notams.route.Coordinate;
+import ou.capstone.notams.validation.AirportDirectory;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -10,13 +17,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import ou.capstone.notams.route.Coordinate;
-import ou.capstone.notams.route.RouteCalculator;
-import ou.capstone.notams.validation.AirportDirectory;
 
 /**
  * Fetches raw NOTAM data from the FAA API for given routes and airports.
@@ -33,6 +33,7 @@ public class NotamFetcher {
     private final String clientId;
     private final String clientSecret;
     private final HttpClient httpClient;
+
     private final AirportDirectory airportDirectory;
 
     // Radius in nautical miles for location queries
@@ -44,6 +45,9 @@ public class NotamFetcher {
     // HTTP per-request timeout (seconds), configurable for experimentation
     private static final int HTTP_TIMEOUT_SECONDS =
             Integer.parseInt(System.getenv().getOrDefault("NOTAM_HTTP_TIMEOUT_SECONDS", "30"));
+
+    // Toggleable via JVM property: -DVISUALIZE_ROUTE=true
+    private static final boolean VISUALIZE_ROUTE = Boolean.getBoolean("VISUALIZE_ROUTE");
 
     /**
      * Constructs a NotamFetcher.
@@ -109,6 +113,11 @@ public class NotamFetcher {
         final long fetchStart = System.currentTimeMillis();
 
         int index = 1;
+
+        // Google Maps visualization toggleable via system properties
+        printRouteVisualization(waypoints);
+
+        // Fetch NOTAMs at each waypoint
         for (Coordinate waypoint : waypoints) {
             final long singleFetchStart = System.currentTimeMillis();
             String response = fetchForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
@@ -134,6 +143,29 @@ public class NotamFetcher {
         }
 
         return responses;
+    }
+
+    /**
+     * Prints a Google Maps visualization URL of the route if VISUALIZE_ROUTE is enabled.
+     */
+    private static void printRouteVisualization(List<Coordinate> waypoints) {
+        if (!VISUALIZE_ROUTE || waypoints == null || waypoints.isEmpty()) {
+            return;
+        }
+
+        logger.info("======= ROUTE VISUALIZATION =======");
+        logger.info("Google Maps URL (copy and paste to view):");
+
+        StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
+        for (Coordinate waypoint : waypoints) {
+            mapsUrl.append(waypoint.getLatitude())
+                   .append(",")
+                   .append(waypoint.getLongitude())
+                   .append("/");
+        }
+
+        logger.info(mapsUrl.toString());
+        logger.info("===================================\n");
     }
 
     /**
