@@ -1,20 +1,19 @@
 package ou.capstone.notams.api;
 
-import ou.capstone.notams.Notam;
-import ou.capstone.notams.route.Coordinate;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import ou.capstone.notams.Notam;
+import ou.capstone.notams.route.Coordinate;
 
 /**
  * Parses FAA GeoJSON responses and converts them into Notam objects.
@@ -38,12 +37,14 @@ public class NotamParser {
     public List<Notam> parseGeoJson(String geoJsonResponse) {
         logger.info("Starting GeoJSON parsing");
 
-        logger.info("API Response preview: {}", geoJsonResponse.substring(0, Math.min(200, geoJsonResponse.length())));
-
         if (geoJsonResponse == null || geoJsonResponse.trim().isEmpty()) {
             logger.warn("Empty or null GeoJSON response provided");
-            return new ArrayList<>();
+            return java.util.Collections.emptyList();
         }
+       if (logger.isDebugEnabled()) {
+           logger.debug("API Response preview: {}",
+                geoJsonResponse.substring(0, Math.min(200, geoJsonResponse.length())));
+       }
 
         logger.debug("Raw GeoJSON response length: {} characters", geoJsonResponse.length());
 
@@ -51,27 +52,34 @@ public class NotamParser {
             JsonNode root = objectMapper.readTree(geoJsonResponse);
             logger.debug("Successfully parsed root JSON object");
 
-            if (!root.has("items")) {
-                logger.warn("GeoJSON response missing 'items' array");
-                return new ArrayList<>();
+            // FIX #2: Support both FAA 'items' shape and standard GeoJSON 'features'
+            JsonNode container = null;
+            if (root.has("items")) {
+                container = root.get("items");
+            } else if (root.has("features")) {
+                container = root.get("features");
             }
-
-            JsonNode items = root.get("items");
-            if (!items.isArray()) {
-                logger.warn("'items' is not an array");
-                return new ArrayList<>();
+            
+            // If neither exists, treat as an error instead of silently succeeding
+            if (container == null) {
+                throw new IllegalArgumentException("GeoJSON missing expected 'items' or 'features' array");
             }
-
-            logger.info("Found {} items in GeoJSON response", items.size());
-
+            if (!container.isArray()) {
+                throw new IllegalArgumentException("'items'/'features' must be an array");
+            }
+            
+            logger.info("Found {} items in GeoJSON response", container.size());
+            if (container.size() == 0) {
+                return java.util.Collections.emptyList();
+            }
             final List<Notam> notams = new ArrayList<>();
             int successfullyParsed = 0;
             int skipped = 0;
 
-            for (int i = 0; i < items.size(); i++) {
+            for (int i = 0; i < container.size(); i++) {
                 try {
-                    JsonNode feature = items.get(i);
-                    logger.debug("Processing feature {}/{}", i + 1, items.size());
+                    JsonNode feature = container.get(i);
+                    logger.debug("Processing feature {}/{}", i + 1, container.size());
 
                     Notam notam = parseFeature(feature);
                     if (notam != null) {
@@ -476,4 +484,4 @@ public class NotamParser {
             return null;
         }
     }
-  }
+}
