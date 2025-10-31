@@ -122,25 +122,26 @@ public class NotamParser {
      *         processing other valid NOTAMs in the collection.
      */
     private Notam parseFeature(JsonNode feature) {
-        try {
-            // Navigate to the coreNOTAMData.notam object with cleaner validation
-            JsonNode notamData = navigateToNotamData(feature);
-            if (notamData == null) {
-                return null;
-            }
+            try {
+                // Navigate to the coreNOTAMData.notam object with cleaner validation
+                JsonNode notamData = navigateToNotamData(feature);
+                if (notamData == null) {
+                    return null;
+                }
 
-            // Extract required fields with validation
-            String id = extractRequiredField(notamData, "id");
-            String number = extractRequiredField(notamData, "number");
-            String issuedStr = extractRequiredField(notamData, "issued");
-            
-            if (id == null || number == null || issuedStr == null) {
-                logger.debug("Feature missing required fields - id: {}, number: {}, issued: {}", 
+                // Extract required fields with validation
+                String id = extractRequiredField(notamData, "id");
+                String number = extractRequiredField(notamData, "number");
+                String issuedStr = extractRequiredField(notamData, "issued");
+
+                if (id == null || number == null || issuedStr == null) {
+                    logger.debug("Feature missing required fields - id: {}, number: {}, issued: {}",
                             id, number, issuedStr);
-                return null;
-            }
+                    return null;
+                }
 
-            OffsetDateTime issued = parseTimestamp(issuedStr);
+
+                OffsetDateTime issued = parseTimestamp(issuedStr);
             if (issued == null) {
                 logger.debug("Failed to parse issued timestamp: {}", issuedStr);
                 return null;
@@ -153,17 +154,30 @@ public class NotamParser {
 
             // Extract geometry (coordinates)
             Coordinate coordinates = extractCoordinates(feature);
+            double latitude = 0.0;
+            double longitude = 0.0;
+
             if (coordinates == null) {
-                logger.debug("Feature has invalid/missing geometry, skipping NOTAM");
-                return null;
+                // Try to extract from text as fallback
+                coordinates = extractCoordinatesFromText(text);
+
+                if (coordinates == null) {
+                    logger.warn("NOTAM {} has invalid/missing geometry - using default coordinates. Text/metadata preserved for flight safety.", id);
+                } else {
+                    logger.info("NOTAM {} has invalid geometry field but coordinates extracted from text: ({}, {})",
+                               id, coordinates.latDeg, coordinates.lonDeg);
+                    latitude = coordinates.latDeg;
+                    longitude = coordinates.lonDeg;
+                }
+            } else {
+                latitude = coordinates.latDeg;
+                longitude = coordinates.lonDeg;
             }
-            double latitude = coordinates.latDeg;
-            double longitude = coordinates.lonDeg;
 
             // Extract radius if available
             Double radiusNm = extractRadius(feature, feature.get("properties").get("coreNOTAMData"));
 
-            logger.debug("Parsed NOTAM - ID: {}, Number: {}, Type: {}, Location: {}", 
+            logger.debug("Parsed NOTAM - ID: {}, Number: {}, Type: {}, Location: {}",
                         id, number, type, icaoLocation);
 
             return new Notam(
@@ -185,6 +199,63 @@ public class NotamParser {
             logger.warn("Error parsing feature due to unexpected error: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Attempts to extract coordinates from NOTAM text when geometry is missing.
+     * Looks for patterns like "PSN 5728N 1038E" (position in degrees/minutes).
+     *
+     * @param text the NOTAM text field
+     * @return Coordinate object if pattern found, null otherwise
+     */
+    private Coordinate extractCoordinatesFromText(String text) {
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+
+        // Pattern: PSN followed by coordinates like 5728N 1038E
+        // Format: DDMM[.MM]N DDDMM[.MM]E (degrees, minutes, optional decimal minutes)
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "PSN\\s+(\\d{4}(?:\\.\\d+)?)([NS])\\s+(\\d{4,5}(?:\\.\\d+)?)([EW])",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+
+        if (matcher.find()) {
+            try {
+                String latStr = matcher.group(1);
+                String latDir = matcher.group(2);
+                String lonStr = matcher.group(3);
+                String lonDir = matcher.group(4);
+
+                // Parse latitude (DDMM format)
+                double latDegrees = Integer.parseInt(latStr.substring(0, 2));
+                double latMinutes = Double.parseDouble(latStr.substring(2));
+                double latitude = latDegrees + (latMinutes / 60.0);
+                if ("S".equalsIgnoreCase(latDir)) {
+                    latitude = -latitude;
+                }
+
+                // Parse longitude (DDDMM format)
+                int lonDegEnd = lonStr.length() >= 5 ? 3 : 2;
+                double lonDegrees = Integer.parseInt(lonStr.substring(0, lonDegEnd));
+                double lonMinutes = Double.parseDouble(lonStr.substring(lonDegEnd));
+                double longitude = lonDegrees + (lonMinutes / 60.0);
+                if ("W".equalsIgnoreCase(lonDir)) {
+                    longitude = -longitude;
+                }
+
+                logger.debug("Extracted coordinates from text: lat={}, lon={}", latitude, longitude);
+                return validateAndCreateCoordinate(latitude, longitude);
+
+            } catch (Exception e) {
+                logger.debug("Failed to parse coordinates from text: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -275,19 +346,20 @@ public class NotamParser {
      * @return Coordinate object with latitude and longitude, or null if geometry is missing/invalid.
      */
     private Coordinate extractCoordinates(JsonNode feature) {
+        String geometryType = null;
         try {
             if (!feature.has("geometry")) {
-                logger.warn("Feature missing 'geometry' field (required for coordinate extraction) - NOTAM will be skipped");
+                logger.debug("Feature missing 'geometry' field - using default coordinates");
                 return null;
             }
 
             JsonNode geometry = feature.get("geometry");
             if (!geometry.has("type")) {
-                logger.warn("Geometry missing 'type' field - NOTAM will be skipped");
+                logger.debug("Geometry missing 'type' field - using default coordinates");
                 return null;
             }
 
-            String geometryType = geometry.get("type").asText();
+            geometryType = geometry.get("type").asText();
 
             // Handle Point geometry
             if ("Point".equals(geometryType)) {
@@ -299,21 +371,19 @@ public class NotamParser {
                 return extractGeometryCollectionCoordinates(geometry);
             }
 
-            logger.warn("Geometry type '{}' is not supported (only 'Point' and 'GeometryCollection' are supported) - NOTAM will be skipped",
-                    geometryType);
+            logger.debug("Geometry type '{}' is not supported (only 'Point' and 'GeometryCollection' are supported) - using default coordinates", geometryType);
             return null;
 
         } catch (ClassCastException e) {
-            logger.warn("Failed to extract coordinates due to type conversion error: {} - NOTAM will be skipped",
+            logger.debug("Failed to extract coordinates due to type conversion error: {} - using default coordinates",
                     e.getMessage());
             return null;
         } catch (NumberFormatException e) {
-            logger.warn("Failed to extract coordinates due to number format error: {} - NOTAM will be skipped",
+            logger.debug("Failed to extract coordinates due to number format error: {} - using default coordinates",
                     e.getMessage());
             return null;
         } catch (Exception e) {
-            logger.warn("Unexpected error extracting coordinates ({}): {} - NOTAM will be skipped",
-                    e.getClass().getSimpleName(), e.getMessage());
+            logger.debug("Unexpected error extracting coordinates ({}): {} - using default coordinates", e.getClass().getSimpleName(), e.getMessage());
             return null;
         }
     }
@@ -326,18 +396,18 @@ public class NotamParser {
      */
     private Coordinate extractPointCoordinates(JsonNode geometry) {
         if (!geometry.has("coordinates")) {
-            logger.warn("Point geometry missing 'coordinates' field - NOTAM will be skipped");
+            logger.debug("Point geometry missing 'coordinates' field - using default coordinates");
             return null;
         }
 
         JsonNode coords = geometry.get("coordinates");
         if (!coords.isArray()) {
-            logger.warn("Point geometry coordinates is not an array - NOTAM will be skipped");
+            logger.debug("Point geometry coordinates is not an array - using default coordinates");
             return null;
         }
 
         if (coords.size() < 2) {
-            logger.warn("Point geometry coordinates array has {} elements, expected at least 2 - NOTAM will be skipped",
+            logger.debug("Point geometry coordinates array has {} elements, expected at least 2 - using default coordinates",
                     coords.size());
             return null;
         }
@@ -358,18 +428,18 @@ public class NotamParser {
      */
     private Coordinate extractGeometryCollectionCoordinates(JsonNode geometry) {
         if (!geometry.has("geometries")) {
-            logger.warn("GeometryCollection missing 'geometries' array - NOTAM will be skipped");
+            logger.debug("GeometryCollection missing 'geometries' array - using default coordinates");
             return null;
         }
 
         JsonNode geometries = geometry.get("geometries");
         if (!geometries.isArray()) {
-            logger.warn("GeometryCollection 'geometries' is not an array - NOTAM will be skipped");
+            logger.debug("GeometryCollection 'geometries' is not an array - using default coordinates");
             return null;
         }
 
         if (geometries.isEmpty()) {
-            logger.warn("GeometryCollection has empty 'geometries' array - NOTAM will be skipped");
+            logger.debug("GeometryCollection has empty 'geometries' array - using default coordinates");
             return null;
         }
 
@@ -389,7 +459,7 @@ public class NotamParser {
             }
         }
 
-        logger.warn("GeometryCollection contains no Point geometry - NOTAM will be skipped");
+        logger.debug("GeometryCollection contains no Point geometry - using default coordinates");
         return null;
     }
 
@@ -403,14 +473,12 @@ public class NotamParser {
     private Coordinate validateAndCreateCoordinate(double latitude, double longitude) {
         // Validate coordinate ranges
         if (latitude < -90 || latitude > 90) {
-            logger.warn("Invalid latitude value: {} (must be between -90 and 90) - NOTAM will be skipped",
-                    latitude);
+            logger.debug("Invalid latitude value: {} (must be between -90 and 90) - using default coordinates", latitude);
             return null;
         }
 
         if (longitude < -180 || longitude > 180) {
-            logger.warn("Invalid longitude value: {} (must be between -180 and 180) - NOTAM will be skipped",
-                    longitude);
+            logger.debug("Invalid longitude value: {} (must be between -180 and 180) - using default coordinates", longitude);
             return null;
         }
 
