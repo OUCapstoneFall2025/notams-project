@@ -34,4 +34,17 @@ application {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // Set environment variable to use mock data for all tests by default
+    environment 'USE_MOCK_DATA', 'true'
+}
+
+// Task to run integration tests that require live API access
+task integrationTest(type: Test) {
+    useJUnitPlatform()
+    // Don't set USE_MOCK_DATA for integration tests - they should use live API
+    // Only run tests tagged with 'integration'
+    systemProperty 'junit.jupiter.includeTags', 'integration'
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
+    // Only include the specific integration test
+    include '**/GeoJsonReaderTest.fetchesLiveNotams_viaConnectToAPI_andParses'
 }
