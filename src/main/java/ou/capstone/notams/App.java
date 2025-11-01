@@ -17,7 +17,6 @@ import java.util.Set;
 
 /**
  * Main application driver for the NOTAM Prioritization System.
- *
  * Orchestrates the flow between components:
  * - User input collection and validation
  * - NOTAM fetching via FAA API
@@ -161,6 +160,32 @@ public final class App {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("NOTAMs for Flight: " + departureCode + " to " + destinationCode);
         System.out.println("Sorted by Usefulness (Most Useful First)");
+
+        // First, surface region-wide ARTCC notices (no point geometry)
+        final List<Notam> regionWide = scoredNotams.stream()
+                .map(sn -> sn.notam)
+                .filter(App::isRegionWide)
+                .toList();
+
+        if (!regionWide.isEmpty()) {
+            System.out.println();
+            System.out.println(">>> REGION-WIDE NOTICES (ARTCC) <<<");
+            System.out.println("These NOTAMs apply to the entire Air Route Traffic Control Center");
+            System.out.println("Count: " + regionWide.size());
+            System.out.println("-".repeat(80));
+            System.out.printf(Locale.ROOT, "%-8s %-6s %-10s %s%n",
+                    "Number", "ARTCC", "Issued", "Text");
+            System.out.println("-".repeat(80));
+            for (final Notam n : regionWide) {
+                System.out.printf(Locale.ROOT, "%-8s %-6s %-10s %s%n",
+                        n.getNumber() != null ? n.getNumber() : "N/A",
+                        n.getLocation() != null ? n.getLocation() : "N/A",
+                        n.getIssued() != null ? n.getIssued().toString().substring(0, 10) : "N/A",
+                        n.getText() != null ? truncate(n.getText(), 80) : "");
+            }
+            System.out.println();
+        }
+
         System.out.println("=".repeat(80));
 
         if (scoredNotams.isEmpty()) {
@@ -171,24 +196,24 @@ public final class App {
         System.out.println("\nTotal NOTAMs: " + scoredNotams.size());
         System.out.println("\nScore: 0-100 (higher = more useful)\n");
 
-        System.out.println(String.format(Locale.ROOT, "%-6s %-8s %-6s %-10s %s",
-                "Score", "Number", "Loc", "Issued", "Text"));
+        System.out.printf(Locale.ROOT, "%-6s %-8s %-6s %-10s %s%n",
+                "Score", "Number", "Loc", "Issued", "Text");
         System.out.println("-".repeat(80));
-
         for (final ScoredNotam sn : scoredNotams) {
             final Notam notam = sn.notam;
-            final int roundedScore = roundToTens(sn.score);
+            if (isRegionWide(notam)) continue; // already printed above
 
+            final int roundedScore = roundToTens(sn.score);
             final String location = notam.getLocation() != null ? notam.getLocation() : "N/A";
             final String issued = notam.getIssued() != null ? notam.getIssued().toString().substring(0, 10) : "N/A";
             final String text = notam.getText() != null ? truncate(notam.getText(), 50) : "";
 
-            System.out.println(String.format(Locale.ROOT, "%-6d %-8s %-6s %-10s %s",
+            System.out.printf(Locale.ROOT, "%-6d %-8s %-6s %-10s %s%n",
                     roundedScore,
                     notam.getNumber(),
                     location,
                     issued,
-                    text));
+                    text);
         }
 
         System.out.println("\n" + "=".repeat(80) + "\n");
@@ -222,16 +247,9 @@ public final class App {
     }
 
     /**
-     * Simple container for a Notam with its score.
-     */
-    private static final class ScoredNotam {
-        final Notam notam;
-        final int score;
-
-        ScoredNotam(final Notam notam, final int score) {
-            this.notam = notam;
-            this.score = score;
-        }
+         * Simple container for a Notam with its score.
+         */
+        private record ScoredNotam(Notam notam, int score) {
     }
 
     /**
@@ -248,4 +266,28 @@ public final class App {
         }
         return result.airport().get().code();
     }
+    /**
+     * Checks if a NOTAM has valid geographic coordinates.
+     * Returns false for:
+     * - null coordinates
+     * - sentinel values (999.0) indicating unparseable geometry
+     * - NaN values (in case future parsers use NaN)
+     */
+    private static boolean hasCoordinates(final Notam n) {
+        final Double lat = n.getLatitude();
+        final Double lon = n.getLongitude();
+        if (lat == null || lon == null) return false;
+        if (Double.isNaN(lat) || Double.isNaN(lon)) return false;
+        if (Double.compare(lat, 999.0) == 0 || Double.compare(lon, 999.0) == 0) return false;
+        return true;
+    }
+
+    private static boolean isArtcc(final String loc) {
+        return loc != null && loc.matches("^KZ[A-Z]{2}$");
+    }
+
+    private static boolean isRegionWide(final Notam n) {
+        return isArtcc(n.getLocation()) && !hasCoordinates(n);
+    }
+
 }
