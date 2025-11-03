@@ -1,12 +1,13 @@
 package ou.capstone.notams;
 
+import ou.capstone.notams.NotamDeduplication;
 import ou.capstone.notams.api.NotamFetcher;
 import ou.capstone.notams.api.NotamParser;
+
 import ou.capstone.notams.validation.AirportValidator;
 import ou.capstone.notams.validation.ValidationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,7 +82,12 @@ public final class App {
             }
 
             logger.info("Parsed {} NOTAMs", allNotams.size());
-
+            
+            // Deduplication 
+            final List<Notam> uniqueNotams = NotamDeduplication.dedup(allNotams);
+            logger.info("Dedup result: {} → {} unique NOTAMs",
+                    allNotams.size(), uniqueNotams.size());
+         
             // Step 5: Score NOTAMs (delegated to NotamScoringDemo.Scorer)
             final Set<String> keyAirports = new HashSet<>(Arrays.asList(departureCode, destinationCode));
             final Instant flightStart = Instant.now().plusSeconds(3600); // Assume flight in 1 hour
@@ -90,7 +96,7 @@ public final class App {
             final NotamScoringDemo.Scorer scorer = new NotamScoringDemo.Scorer();
             final List<ScoredNotam> scoredNotams = new ArrayList<>();
 
-            for (final Notam notam : allNotams) {
+            for (final Notam notam : uniqueNotams) { // using dedup list
                 final NotamScoringDemo.ScoredNotam wrappedNotam = wrapNotam(notam);
                 final int score = scorer.score(wrappedNotam, flightStart, flightEnd, keyAirports);
                 scoredNotams.add(new ScoredNotam(notam, score));
