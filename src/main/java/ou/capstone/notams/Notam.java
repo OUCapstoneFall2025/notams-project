@@ -14,8 +14,8 @@ public class Notam {
     private final String type;         // ex: RUNWAY, TAXIWAY, AIRSPACE
     private final OffsetDateTime issued;
     private final String location;     // ICAO code (ex: KATL)
-    private final double latitude;     // decimal degrees
-    private final double longitude;    // decimal degrees
+    private final Double latitude;     // decimal degrees
+    private final Double longitude;    // decimal degrees
     private final Double radiusNm;     // radius in NM (nullable)
     private final String text;         // readable NOTAM text
 
@@ -25,8 +25,8 @@ public class Notam {
         final String type,
         final OffsetDateTime issued,
         final String location,
-        final double latitude,
-        final double longitude,
+        final Double latitude,
+        final Double longitude,
         final Double radiusNm,
         final String text
     ) {
@@ -46,8 +46,8 @@ public class Notam {
     public String getType() { return type; }
     public OffsetDateTime getIssued() { return issued; }
     public String getLocation() { return location; }
-    public double getLatitude() { return latitude; }
-    public double getLongitude() { return longitude; }
+    public Double getLatitude() { return latitude; }
+    public Double getLongitude() { return longitude; }
     public Double getRadiusNm() { return radiusNm; }
     public String getText() { return text; }
 
