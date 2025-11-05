@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -41,6 +42,7 @@ public final class ConnectToAPI {
 
     /**
      * Fetches NOTAMs from the FAA API for a specific ICAO location.
+     * Uses mock data when ConnectToApi.UseMockData system property is set to "true".
      *
      * @param icaoLocation The ICAO airport code (e.g., "KOKC")
      * @return List of parsed Notam objects from the FAA API response
@@ -48,6 +50,13 @@ public final class ConnectToAPI {
      */
     public static List<Notam> fetchNotams(final String icaoLocation) throws Exception {
         logger.info("Starting NOTAM fetch for ICAO location: {}", icaoLocation);
+
+        // Check if we should use mock data (set via -DConnectToApi.UseMockData=true)
+        final String useMockData = System.getProperty("ConnectToApi.UseMockData");
+        if ("true".equalsIgnoreCase(useMockData)) {
+            logger.info("Using mock data (ConnectToApi.UseMockData system property is set)");
+            return loadMockNotams();
+        }
 
         final String clientId = System.getenv("FAA_CLIENT_ID");
         final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
@@ -88,6 +97,34 @@ public final class ConnectToAPI {
         } else {
             logger.error("FAA API returned non-200 status: {}. URL: {}", response.statusCode(), uri);
             throw new IOException("FAA API returned non-200 status: " + response.statusCode());
+        }
+    }
+
+    /**
+     * Loads mock NOTAM data from resources for testing/development purposes.
+     * This method reads the mock-faa-response.json file and parses it using GeoJsonReader.
+     *
+     * @return List of parsed Notam objects from the mock data
+     * @throws Exception if the mock data file cannot be read or parsed
+     */
+    private static List<Notam> loadMockNotams() throws Exception {
+        logger.info("Loading mock NOTAM data from resources");
+        
+        try (final InputStream inputStream = ConnectToAPI.class.getClassLoader()
+                .getResourceAsStream("mock-faa-response.json")) {
+            
+            if (inputStream == null) {
+                throw new IOException("Mock data file 'mock-faa-response.json' not found in resources");
+            }
+            
+            final String mockJson = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(mockJson);
+            logger.info("Successfully loaded {} mock NOTAMs", notams.size());
+            return notams;
+            
+        } catch (IOException e) {
+            logger.error("Failed to load mock NOTAM data: {}", e.getMessage());
+            throw new Exception("Failed to load mock NOTAM data", e);
         }
     }
 

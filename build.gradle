@@ -17,6 +17,10 @@ dependencies {
     testImplementation libs.junit.jupiter
     testRuntimeOnly  libs.junit.platform.launcher 
     
+    // Mockito
+    testImplementation libs.mockito.core
+    testImplementation libs.mockito.junit.jupiter
+    
     // Logging
     implementation libs.slf4j.api
     implementation libs.logback.classic
@@ -32,6 +36,31 @@ application {
     mainClass = 'ou.capstone.notams.App'
 }
 
+// Task to run ConnectToAPI with mock data
+task runWithMockData(type: JavaExec) {
+    group = 'application'
+    description = 'Run ConnectToAPI with mock data (no API credentials needed)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ou.capstone.notams.ConnectToAPI'
+    systemProperty 'ConnectToApi.UseMockData', 'true'
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    // Default behavior: tests use mock data via Mockito
+    // No system property needed - tests will mock ConnectToAPI by default
+}
+
+// Task to run integration tests that require live API access
+task integrationTest(type: Test) {
+    useJUnitPlatform()
+    // Enable disabled tests for integration testing
+    systemProperty 'junit.jupiter.testinstance.lifecycle.default', 'per_method'
+    // Only run tests tagged with 'integration'
+    systemProperty 'junit.jupiter.includeTags', 'integration'
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
+    // Re-enable disabled tests
+    filter {
+        includeTestsMatching "*fetchesLiveNotams*"
+    }
 }
