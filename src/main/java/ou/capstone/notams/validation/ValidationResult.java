@@ -3,7 +3,9 @@ package ou.capstone.notams.validation;
 import java.util.List;
 import java.util.Optional;
 
-/** Result of validating a user-provided airport identifier. */
+/**
+ * Result of validating a user-provided airport identifier.
+ */
 public final class ValidationResult {
     private final boolean ok;
     private final String message;
@@ -25,8 +27,19 @@ public final class ValidationResult {
         return new ValidationResult(false, message, null, suggestions);
     }
 
-    public boolean isOk() { return ok; } // isOk() for booleans
-    public String message() { return message; }
-    public Optional<AirportId> airport() { return Optional.ofNullable(airport); }
-    public List<String> suggestions() { return suggestions; }
+    public boolean isOk() {
+        return ok;
+    }
+
+    public String message() {
+        return message;
+    }
+
+    public Optional<AirportId> airport() {
+        return Optional.ofNullable(airport);
+    }
+
+    public List<String> suggestions() {
+        return suggestions;
+    }
 }
