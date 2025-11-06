@@ -67,13 +67,53 @@ Or set the system property to use mock data:
 ./gradlew run --main-class ou.capstone.notams.ConnectToAPI -DConnectToApi.UseMockData=true
 ```
 
-### Run the main App (currently just parses airport codes):
+### Run the main App:
 
 ```bash
-./gradlew run --args="--dep JFK --dest LAX"
+./gradlew run --args "KOKC KDFW"
 ```
 
-**Note:** The main `App` class currently parses airport codes but doesn't fetch NOTAMs yet.
+This runs the full NOTAM prioritization system with two airport codes (departure and destination).
+
+#### Configurable Output Options
+
+The output format can be customized using command-line arguments:
+
+**Full NOTAM output (no truncation):**
+
+```bash
+./gradlew run --args "KOKC KDFW --full-output"
+```
+
+**Custom truncation length:**
+
+```bash
+./gradlew run --args "KOKC KDFW --truncate=50"
+```
+
+**Disable delimiters between NOTAMs:**
+
+```bash
+./gradlew run --args "KOKC KDFW --no-delimiters"
+```
+
+**Show metadata inline with text (instead of separated):**
+
+```bash
+./gradlew run --args "KOKC KDFW --inline-metadata"
+```
+
+**Combine multiple options:**
+
+```bash
+./gradlew run --args "KOKC KDFW --full-output --no-delimiters"
+```
+
+**Default behavior:**
+
+- Truncated to 100 characters
+- Delimiters enabled
+- Metadata separated from text
 
 ---
 

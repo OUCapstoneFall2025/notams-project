@@ -92,8 +92,14 @@ public final class App {
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
 
-            // Step 7: Display results
-            displayResults(prioritizedNotams, departureCode, destinationCode);
+            // Step 7: Parse output configuration from command-line arguments
+            final OutputConfig outputConfig = OutputConfig.parseArgs(args);
+            logger.debug("Output config: fullOutput={}, truncateLength={}, showDelimiters={}, separateMetadata={}",
+                    outputConfig.isFullOutput(), outputConfig.getTruncateLength(),
+                    outputConfig.isShowDelimiters(), outputConfig.isSeparateMetadata());
+
+            // Step 8: Display results
+            displayResults(prioritizedNotams, departureCode, destinationCode, outputConfig);
 
             logger.info("NOTAM Prioritization System completed successfully");
 
@@ -118,14 +124,17 @@ public final class App {
     /**
      * Displays prioritized NOTAMs to the user.
      * Shows NOTAMs sorted by priority (most important first).
+     * Output format is configurable via OutputConfig.
      *
      * @param prioritizedNotams list of NOTAMs already sorted by priority
      * @param departureCode departure airport code
      * @param destinationCode destination airport code
+     * @param outputConfig configuration for output formatting
      */
     private static void displayResults(final List<Notam> prioritizedNotams,
                                        final String departureCode,
-                                       final String destinationCode) {
+                                       final String destinationCode,
+                                       final OutputConfig outputConfig) {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("NOTAMs for Flight: " + departureCode + " to " + destinationCode);
         System.out.println("Sorted by Priority (Most Important First)");
@@ -139,8 +148,24 @@ public final class App {
         System.out.println("\nTotal NOTAMs: " + prioritizedNotams.size());
         System.out.println();
 
-        System.out.println(String.format(Locale.ROOT, "%-5s %-8s %-6s %-6s %-10s %s",
-                "Rank", "Number", "Type", "Loc", "Issued", "Text"));
+        if (outputConfig.isSeparateMetadata()) {
+            displayWithSeparateMetadata(prioritizedNotams, outputConfig);
+        } else {
+            displayWithInlineMetadata(prioritizedNotams, outputConfig);
+        }
+
+        System.out.println("\n" + "=".repeat(80) + "\n");
+    }
+
+    /**
+     * Displays NOTAMs with metadata separated from text.
+     * Shows metadata in a table, then full/truncated text below.
+     */
+    private static void displayWithSeparateMetadata(final List<Notam> prioritizedNotams,
+                                                    final OutputConfig outputConfig) {
+        // Display metadata table
+        System.out.println(String.format(Locale.ROOT, "%-5s %-8s %-6s %-6s %-10s",
+                "Rank", "Number", "Type", "Loc", "Issued"));
         System.out.println("-".repeat(80));
 
         int rank = 1;
@@ -148,7 +173,57 @@ public final class App {
             final String type = notam.getType() != null ? truncate(notam.getType(), 6) : "N/A";
             final String location = notam.getLocation() != null ? notam.getLocation() : "N/A";
             final String issued = notam.getIssued() != null ? notam.getIssued().toString().substring(0, 10) : "N/A";
-            final String text = notam.getText() != null ? truncate(notam.getText(), 45) : "";
+
+            System.out.println(String.format(Locale.ROOT, "%-5d %-8s %-6s %-6s %-10s",
+                    rank++,
+                    notam.getNumber(),
+                    type,
+                    location,
+                    issued));
+        }
+
+        // Display text separately
+        System.out.println("\n" + "-".repeat(80));
+        System.out.println("NOTAM Text:");
+        System.out.println("-".repeat(80));
+
+        rank = 1;
+        for (final Notam notam : prioritizedNotams) {
+            if (outputConfig.isShowDelimiters() && rank > 1) {
+                System.out.println("\n" + "-".repeat(80));
+            }
+
+            final String text = notam.getText() != null ? notam.getText() : "";
+            final String displayText = outputConfig.isFullOutput() 
+                    ? text 
+                    : truncate(text, outputConfig.getTruncateLength());
+
+            System.out.println(String.format(Locale.ROOT, "[Rank %d] %s", rank++, displayText));
+        }
+    }
+
+    /**
+     * Displays NOTAMs with metadata inline with text (original format).
+     */
+    private static void displayWithInlineMetadata(final List<Notam> prioritizedNotams,
+                                                  final OutputConfig outputConfig) {
+        System.out.println(String.format(Locale.ROOT, "%-5s %-8s %-6s %-6s %-10s %s",
+                "Rank", "Number", "Type", "Loc", "Issued", "Text"));
+        System.out.println("-".repeat(80));
+
+        int rank = 1;
+        for (final Notam notam : prioritizedNotams) {
+            if (outputConfig.isShowDelimiters() && rank > 1) {
+                System.out.println("-".repeat(80));
+            }
+
+            final String type = notam.getType() != null ? truncate(notam.getType(), 6) : "N/A";
+            final String location = notam.getLocation() != null ? notam.getLocation() : "N/A";
+            final String issued = notam.getIssued() != null ? notam.getIssued().toString().substring(0, 10) : "N/A";
+            final String text = notam.getText() != null ? notam.getText() : "";
+            final String displayText = outputConfig.isFullOutput() 
+                    ? text 
+                    : truncate(text, outputConfig.getTruncateLength());
 
             System.out.println(String.format(Locale.ROOT, "%-5d %-8s %-6s %-6s %-10s %s",
                     rank++,
@@ -156,10 +231,8 @@ public final class App {
                     type,
                     location,
                     issued,
-                    text));
+                    displayText));
         }
-
-        System.out.println("\n" + "=".repeat(80) + "\n");
     }
 
     /**
