@@ -224,22 +224,17 @@ import ou.capstone.notams.validation.AirportDirectory;
     }
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
-     * Accepts both IATA (3-letter) and ICAO (4-letter) codes.
+     * Accepts both IATA (3-letter) and ICAO (4-letter) local codes.
      * Uses the AirportDirectory to look up coordinates from the airport CSV database.
      *
-     * @param airportCode the IATA or ICAO code of the airport
+     * @param airportCode the code of the airport
      * @return an array containing latitude and longitude as [lat, lon]
      * @throws IllegalArgumentException if the airport code is not found
      */
     private Coordinate getAirportCoordinates(String airportCode) {
-        // Convert to ICAO code for FAA API compatibility
-        String icaoCode = airportDirectory.getIcaoCode(airportCode);
-        if (icaoCode == null) {
-            throw new IllegalArgumentException("Unknown airport: " + airportCode);
-        }
-        Optional<Coordinate> coords = airportDirectory.getCoordinates(icaoCode);
+        Optional<Coordinate> coords = airportDirectory.getCoordinates(airportCode);
         if (coords.isEmpty()) {
-            throw new IllegalArgumentException("No coordinates found for airport: " + icaoCode);
+            throw new IllegalArgumentException("No coordinates found for airport: " + airportCode);
         }
         return coords.get();
     }
