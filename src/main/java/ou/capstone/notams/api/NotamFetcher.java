@@ -26,13 +26,15 @@ import ou.capstone.notams.validation.AirportDirectory;
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
  */
-public class NotamFetcher {
+
+ public class NotamFetcher {
 
     private static final Logger logger = LoggerFactory.getLogger(NotamFetcher.class);
 
     private final String clientId;
     private final String clientSecret;
     private final HttpClient httpClient;
+
     private final AirportDirectory airportDirectory;
 
     // Radius in nautical miles for location queries
@@ -45,20 +47,20 @@ public class NotamFetcher {
     private static final int HTTP_TIMEOUT_SECONDS =
             Integer.parseInt(System.getenv().getOrDefault("NOTAM_HTTP_TIMEOUT_SECONDS", "30"));
 
+    // Toggleable via JVM property: -DVISUALIZE_ROUTE=true
+    private static final boolean VISUALIZE_ROUTE = Boolean.getBoolean("VISUALIZE_ROUTE");
+
     /**
      * Constructs a NotamFetcher.
      * Requires FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables to be set.
-     * @throws IllegalStateException if required environment variables are not set
      */
     public NotamFetcher() {
         this.clientId = System.getenv("FAA_CLIENT_ID");
         this.clientSecret = System.getenv("FAA_CLIENT_SECRET");
-
         if (clientId == null || clientSecret == null) {
             throw new IllegalStateException(
                 "FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
         }
-
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_2)
                 .connectTimeout(Duration.ofSeconds(15))
@@ -105,6 +107,14 @@ public class NotamFetcher {
 
         List<String> responses = new ArrayList<>();
 
+        // Google Maps visualization toggleable via system properties
+        final long visualizationStart = System.currentTimeMillis();
+        printRouteVisualization(waypoints);
+        final long visualizationEnd = System.currentTimeMillis();
+        if (logger.isDebugEnabled()) {
+            logger.debug("Total visualization creation time across all waypoints: {} ms", visualizationEnd - visualizationStart);
+        }
+
         // Measure total fetch time
         final long fetchStart = System.currentTimeMillis();
 
@@ -134,6 +144,29 @@ public class NotamFetcher {
         }
 
         return responses;
+    }
+
+    /**
+     * Prints a Google Maps visualization URL of the route if VISUALIZE_ROUTE is enabled.
+     */
+    private static void printRouteVisualization(List<Coordinate> waypoints) {
+        if (!VISUALIZE_ROUTE || waypoints == null || waypoints.isEmpty()) {
+            return;
+        }
+
+        logger.info("======= ROUTE VISUALIZATION =======");
+        logger.info("Google Maps URL (copy and paste to view):");
+
+        StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
+        for (Coordinate waypoint : waypoints) {
+            mapsUrl.append(waypoint.getLatitude())
+                   .append(",")
+                   .append(waypoint.getLongitude())
+                   .append("/");
+        }
+
+        logger.info(mapsUrl.toString());
+        logger.info("===================================\n");
     }
 
     /**
@@ -189,7 +222,6 @@ public class NotamFetcher {
 
         return response.body();
     }
-
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
      * Accepts both IATA (3-letter) and ICAO (4-letter) codes.
