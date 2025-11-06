@@ -2,19 +2,23 @@ package ou.capstone.notams;
 
 import org.junit.jupiter.api.Test;
 import java.time.OffsetDateTime;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 class NotamTest {
 
     @Test
     void constructsAndExposesFields() {
-        Notam n = new Notam(
-                "N555", "5/31", "RUNWAY",
-                OffsetDateTime.parse("2025-09-28T12:00:00Z"),
-                "KATL", 33.6407, -84.4277, 3.0,
-                "RWY 8L/26R CLOSED"
-        );
+        Notam n = new Notam.Builder()
+                .id("N555")
+                .number("5/31")
+                .type("RUNWAY")
+                .issued(OffsetDateTime.parse("2025-09-28T12:00:00Z"))
+                .location("KATL")
+                .latitude(33.6407)
+                .longitude(-84.4277)
+                .radiusNm(3.0)
+                .text("RWY 8L/26R CLOSED")
+                .build();
 
         assertEquals("N555", n.getId());
         assertEquals("5/31", n.getNumber());
