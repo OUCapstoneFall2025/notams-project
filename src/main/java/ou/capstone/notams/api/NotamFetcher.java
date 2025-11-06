@@ -15,8 +15,7 @@ import ou.capstone.notams.validation.AirportDirectory;
 /**
  * Fetches raw NOTAM data from the FAA API for given routes and airports.
  * CCS-16: Responsible for API connection and data retrieval along flight routes.
- * Requires FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables to be set.
- * If either is missing, the constructor will throw IllegalStateException.
+ * Credential validation is handled by ConnectToAPI when making API calls.
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
  */
@@ -38,19 +37,9 @@ public class NotamFetcher {
 
     /**
      * Constructs a NotamFetcher.
-     * Requires FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables to be set.
-     * @throws IllegalStateException if required environment variables are not set
+     * Credential validation is handled by ConnectToAPI when making API calls.
      */
     public NotamFetcher() {
-        // Validate credentials are available (ConnectToAPI will throw if missing)
-        final String clientId = System.getenv("FAA_CLIENT_ID");
-        final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
-
-        if (clientId == null || clientSecret == null) {
-            throw new IllegalStateException(
-                "FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
-        }
-
         this.airportDirectory = new AirportDirectory();
     }
 
@@ -140,8 +129,7 @@ public class NotamFetcher {
         final long t0 = System.currentTimeMillis();
 
         // Use ConnectToAPI utility class for reusable HTTP client code
-        final ConnectToAPI.QueryParams queryParams = new ConnectToAPI.QueryParams()
-                .coordinates(latitude, longitude, radiusNm)
+        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
                 .pageSize("100"); // NotamFetcher uses pageSize 100
 
         final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);

@@ -36,14 +36,8 @@ application {
     mainClass = 'ou.capstone.notams.App'
 }
 
-// Task to run ConnectToAPI with mock data
-task runWithMockData(type: JavaExec) {
-    group = 'application'
-    description = 'Run ConnectToAPI with mock data (no API credentials needed)'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'ou.capstone.notams.ConnectToAPI'
-    systemProperty 'ConnectToApi.UseMockData', 'true'
-}
+// Task to run ConnectToAPI with mock data (removed - ConnectToAPI no longer has main method)
+// Use tests or manual testing instead
 
 tasks.named('test') {
     useJUnitPlatform()

@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * Utility class for connecting to the FAA NOTAM API.
- * Provides reusable methods for fetching NOTAM data with support for both
+ * Provides reusable methods for fetching raw NOTAM JSON data with support for both
  * ICAO location-based and coordinate-based queries.
  */
 public final class ConnectToAPI {
@@ -28,52 +28,81 @@ public final class ConnectToAPI {
     private static final String FAA_DOMAIN = "external-api.faa.gov";
     private static final String NOTAM_API_PATH = "/notamapi/v1/notams";
     private static final String RESPONSE_FORMAT = "geoJson";
-    private static final String DEFAULT_ICAO = "KOKC";  // TODO: replace with UserAirportInput later
     private static final String DEFAULT_PAGE_SIZE = "50";
     private static final String DEFAULT_PAGE_NUM = "1";
     private static final String SORT_BY = "effectiveStartDate";
     private static final String SORT_ORDER = "Desc";
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
+    private static final int DEFAULT_RADIUS_NM = 50;
 
     /**
-     * Query parameters for FAA NOTAM API requests.
-     * Supports both ICAO location-based and coordinate-based queries.
+     * Validates that FAA API credentials are available in environment variables.
+     * 
+     * @throws IllegalStateException if credentials are missing
      */
-    public static final class QueryParams {
-        private String icaoLocation;
-        private Double latitude;
-        private Double longitude;
-        private Integer radiusNm;
+    public static void validateCredentials() {
+        final String clientId = System.getenv("FAA_CLIENT_ID");
+        final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
+
+        if (clientId == null || clientSecret == null) {
+            logger.error("FAA API credentials not found in environment variables");
+            throw new IllegalStateException("FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
+        }
+    }
+
+    /**
+     * Query parameters builder for FAA NOTAM API requests.
+     * Supports both ICAO location-based and coordinate-based queries.
+     * Use constructors to create instances with required parameters.
+     */
+    public static final class QueryParamsBuilder {
+        private final String icaoLocation;
+        private final Double latitude;
+        private final Double longitude;
+        private final Integer radiusNm;
         private String pageSize = DEFAULT_PAGE_SIZE;
         private String pageNum = DEFAULT_PAGE_NUM;
         private String sortBy = SORT_BY;
         private String sortOrder = SORT_ORDER;
 
         /**
-         * Sets the ICAO airport code for location-based queries.
+         * Creates a builder for ICAO location-based queries.
          * 
          * @param icaoLocation The ICAO airport code (e.g., "KOKC")
-         * @return this builder for method chaining
          */
-        public QueryParams icaoLocation(final String icaoLocation) {
+        public QueryParamsBuilder(final String icaoLocation) {
             this.icaoLocation = icaoLocation;
-            return this;
+            this.latitude = null;
+            this.longitude = null;
+            this.radiusNm = null;
         }
 
         /**
-         * Sets the coordinates for location-based queries.
+         * Creates a builder for coordinate-based queries with default radius.
+         * 
+         * @param latitude The latitude
+         * @param longitude The longitude
+         */
+        public QueryParamsBuilder(final double latitude, final double longitude) {
+            this.icaoLocation = null;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.radiusNm = DEFAULT_RADIUS_NM;
+        }
+
+        /**
+         * Creates a builder for coordinate-based queries with specified radius.
          * 
          * @param latitude The latitude
          * @param longitude The longitude
          * @param radiusNm The radius in nautical miles
-         * @return this builder for method chaining
          */
-        public QueryParams coordinates(final double latitude, final double longitude, final int radiusNm) {
+        public QueryParamsBuilder(final double latitude, final double longitude, final int radiusNm) {
+            this.icaoLocation = null;
             this.latitude = latitude;
             this.longitude = longitude;
             this.radiusNm = radiusNm;
-            return this;
         }
 
         /**
@@ -82,7 +111,7 @@ public final class ConnectToAPI {
          * @param pageSize The page size (default: "50")
          * @return this builder for method chaining
          */
-        public QueryParams pageSize(final String pageSize) {
+        public QueryParamsBuilder pageSize(final String pageSize) {
             this.pageSize = pageSize;
             return this;
         }
@@ -93,7 +122,7 @@ public final class ConnectToAPI {
          * @param pageNum The page number (default: "1")
          * @return this builder for method chaining
          */
-        public QueryParams pageNum(final String pageNum) {
+        public QueryParamsBuilder pageNum(final String pageNum) {
             this.pageNum = pageNum;
             return this;
         }
@@ -104,7 +133,7 @@ public final class ConnectToAPI {
          * @param sortBy The field to sort by (default: "effectiveStartDate")
          * @return this builder for method chaining
          */
-        public QueryParams sortBy(final String sortBy) {
+        public QueryParamsBuilder sortBy(final String sortBy) {
             this.sortBy = sortBy;
             return this;
         }
@@ -115,27 +144,9 @@ public final class ConnectToAPI {
          * @param sortOrder The sort order - "Asc" or "Desc" (default: "Desc")
          * @return this builder for method chaining
          */
-        public QueryParams sortOrder(final String sortOrder) {
+        public QueryParamsBuilder sortOrder(final String sortOrder) {
             this.sortOrder = sortOrder;
             return this;
-        }
-
-        /**
-         * Validates that the query parameters are valid.
-         * Either icaoLocation or coordinates must be set.
-         * 
-         * @throws IllegalArgumentException if query parameters are invalid
-         */
-        private void validate() {
-            if (icaoLocation == null && latitude == null) {
-                throw new IllegalArgumentException("Either icaoLocation or coordinates must be specified");
-            }
-            if (icaoLocation != null && latitude != null) {
-                throw new IllegalArgumentException("Cannot specify both icaoLocation and coordinates");
-            }
-            if (latitude != null && (longitude == null || radiusNm == null)) {
-                throw new IllegalArgumentException("Both latitude, longitude, and radiusNm must be specified for coordinate queries");
-            }
         }
 
         /**
@@ -143,8 +154,7 @@ public final class ConnectToAPI {
          * 
          * @return The URL-encoded query string
          */
-        private String buildQueryString() {
-            validate();
+        private String build() {
             final List<String> params = new ArrayList<>();
             
             params.add("responseFormat=" + enc(RESPONSE_FORMAT));
@@ -175,7 +185,7 @@ public final class ConnectToAPI {
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    public static String fetchRawJson(final QueryParams queryParams, final Integer timeoutSeconds) throws Exception {
+    public static String fetchRawJson(final QueryParamsBuilder queryParams, final Integer timeoutSeconds) throws Exception {
         logger.debug("Fetching NOTAMs with query parameters");
 
         // Check if we should use mock data (set via -DConnectToApi.UseMockData=true)
@@ -185,15 +195,13 @@ public final class ConnectToAPI {
             return loadMockJson();
         }
 
+        // Validate credentials
+        validateCredentials();
+
         final String clientId = System.getenv("FAA_CLIENT_ID");
         final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
 
-        if (clientId == null || clientSecret == null) {
-            logger.error("FAA API credentials not found in environment variables");
-            throw new IllegalStateException("FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
-        }
-
-        final String queryString = queryParams.buildQueryString();
+        final String queryString = queryParams.build();
         final URI uri = new URI("https", FAA_DOMAIN, NOTAM_API_PATH, queryString, null);
         logger.debug("Requesting URL: {}", uri);
 
@@ -227,36 +235,8 @@ public final class ConnectToAPI {
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    public static String fetchRawJson(final QueryParams queryParams) throws Exception {
+    public static String fetchRawJson(final QueryParamsBuilder queryParams) throws Exception {
         return fetchRawJson(queryParams, null);
-    }
-
-    /**
-     * Fetches NOTAMs from the FAA API for the default ICAO location.
-     * Maintains backward compatibility.
-     *
-     * @return List of parsed Notam objects from the FAA API response
-     * @throws Exception if API call fails or credentials are missing
-     */
-    public static List<Notam> fetchNotams() throws Exception {
-        return fetchNotams(DEFAULT_ICAO);
-    }
-
-    /**
-     * Fetches NOTAMs from the FAA API for a specific ICAO location.
-     * Maintains backward compatibility.
-     *
-     * @param icaoLocation The ICAO airport code (e.g., "KOKC")
-     * @return List of parsed Notam objects from the FAA API response
-     * @throws Exception if API call fails or credentials are missing
-     */
-    public static List<Notam> fetchNotams(final String icaoLocation) throws Exception {
-        logger.info("Starting NOTAM fetch for ICAO location: {}", icaoLocation);
-        
-        final String json = fetchRawJson(new QueryParams().icaoLocation(icaoLocation));
-        final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(json);
-        logger.info("Successfully fetched and parsed {} NOTAMs", notams.size());
-        return notams;
     }
 
     /**
@@ -282,18 +262,6 @@ public final class ConnectToAPI {
         } catch (IOException e) {
             logger.error("Failed to load mock NOTAM data: {}", e.getMessage());
             throw new Exception("Failed to load mock NOTAM data", e);
-        }
-    }
-
-
-    /**
-     * Main method for manual testing. For automated tests, see GeoJsonReaderTest.
-     */
-    public static void main(final String[] args) throws Exception {
-        final List<Notam> notams = fetchNotams();
-        logger.info("Fetched {} NOTAMs", notams.size());
-        for (final Notam notam : notams) {
-            logger.info("{}", notam);
         }
     }
 
