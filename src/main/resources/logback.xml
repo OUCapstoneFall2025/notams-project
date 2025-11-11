@@ -47,12 +47,6 @@
         <appender-ref ref="FILE" />
     </logger>
 
-    <!-- Logger for user input handling -->
-    <logger name="ou.capstone.notams.UserAirportInput" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="FILE" />
-    </logger>
-
     <!-- Logger for route calculator -->
     <logger name="ou.capstone.notams.route.RouteCalculator" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE" />
