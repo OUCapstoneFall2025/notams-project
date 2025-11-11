@@ -174,6 +174,25 @@ public final class ConnectToAPI {
             
             return String.join("&", params);
         }
+
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder("QueryParamsBuilder{");
+            if (icaoLocation != null) {
+                sb.append("queryType=ICAO, icaoLocation='").append(icaoLocation).append('\'');
+            } else {
+                sb.append("queryType=COORDINATE")
+                        .append(", latitude=").append(latitude)
+                        .append(", longitude=").append(longitude)
+                        .append(", radiusNm=").append(radiusNm);
+            }
+            sb.append(", pageSize='").append(pageSize).append('\'')
+                    .append(", pageNum='").append(pageNum).append('\'')
+                    .append(", sortBy='").append(sortBy).append('\'')
+                    .append(", sortOrder='").append(sortOrder).append('\'')
+                    .append('}');
+            return sb.toString();
+        }
     }
 
     /**
@@ -186,7 +205,7 @@ public final class ConnectToAPI {
      * @throws Exception if API call fails or credentials are missing
      */
     public static String fetchRawJson(final QueryParamsBuilder queryParams, final Integer timeoutSeconds) throws Exception {
-        logger.debug("Fetching NOTAMs with query parameters");
+        logger.debug("Fetching NOTAMs with query parameters: {}", queryParams);
 
         // Check if we should use mock data (set via -DConnectToApi.UseMockData=true)
         final String useMockData = System.getProperty("ConnectToApi.UseMockData");
