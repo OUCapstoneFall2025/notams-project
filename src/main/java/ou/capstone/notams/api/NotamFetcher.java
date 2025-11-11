@@ -19,7 +19,6 @@ import ou.capstone.notams.validation.AirportDirectory;
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
  */
-
 public class NotamFetcher {
 
     private static final Logger logger = LoggerFactory.getLogger(NotamFetcher.class);
@@ -31,6 +30,10 @@ public class NotamFetcher {
 
     // Spacing between waypoints along route
     private static final double WAYPOINT_SPACING_NM = 50.0;
+
+    // Fetches ten pages per wapoint
+    private static final int MAX_PAGES_PER_WAYPOINT =
+        Integer.parseInt(System.getenv().getOrDefault("NOTAM_MAX_PAGES_PER_WAYPOINT", "10"));
 
     // HTTP per-request timeout (seconds), configurable for experimentation
     private static final int HTTP_TIMEOUT_SECONDS =
@@ -99,7 +102,11 @@ public class NotamFetcher {
         int index = 1;
         for (Coordinate waypoint : waypoints) {
             final long singleFetchStart = System.currentTimeMillis();
-            String response = fetchForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
+
+            // Fetch ALL pages for the waypoint (adds to responses); keeps the single-page method intact.
+            List<String> pages = fetchAll(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
+            responses.addAll(pages);
+
             final long singleFetchEnd = System.currentTimeMillis();
             if (logger.isDebugEnabled()) {
                 logger.debug("Fetch {}/{} at ({}, {}) took {} ms",
@@ -107,7 +114,6 @@ public class NotamFetcher {
                         waypoint.getLatitude(), waypoint.getLongitude(),
                         (singleFetchEnd - singleFetchStart));
             }
-            responses.add(response);
         }
 
         final long fetchEnd = System.currentTimeMillis();
@@ -122,6 +128,109 @@ public class NotamFetcher {
         }
 
         return responses;
+    }
+
+    // ------------------------------------------------------------------
+    // Pagination helpers using ConnectToAPI
+    // ------------------------------------------------------------------
+
+    /**
+     * Fetch all NOTAM pages for a given airport code using the ConnectToAPI helper.
+     */
+    private List<String> fetchAll(final String airportCode) {
+        ConnectToAPI.QueryParamsBuilder queryBuilder =
+                new ConnectToAPI.QueryParamsBuilder(airportCode);
+        queryBuilder.pageNum("1");
+        return fetchAll(queryBuilder);
+    }
+
+    /**
+     * Fetch all NOTAM pages for a given lat/lon/radius using the ConnectToAPI helper.
+     */
+    private List<String> fetchAll(double latitude, double longitude, int queryRadiusNm) {
+        ConnectToAPI.QueryParamsBuilder queryBuilder =
+                new ConnectToAPI.QueryParamsBuilder(latitude, longitude, queryRadiusNm);
+        queryBuilder.pageNum("1");
+        return fetchAll(queryBuilder);
+    }
+
+    /**
+     * Core pagination logic: fetch page 1, inspect the JSON to see how many pages
+     * exist, then loop pages 2..N using the same QueryParamsBuilder.
+     */
+    private List<String> fetchAll(final ConnectToAPI.QueryParamsBuilder queryBuilder) {
+        List<String> pages = new ArrayList<>();
+
+        try {
+            // First page
+            String result = ConnectToAPI.fetchRawJson(queryBuilder);
+            pages.add(result);
+
+            // Determine how many pages the API says we have
+            int maxPagesInResult = extractTotalPages(result);
+            // ADD safety limit
+            maxPagesInResult = Math.min(maxPagesInResult, MAX_PAGES_PER_WAYPOINT);
+
+            // If we can't find pagination info, just return the first page
+            if (maxPagesInResult <= 1) {
+                return pages;
+            }
+
+            // Fetch remaining pages: 2..maxPagesInResult
+            for (int currentPage = 2; currentPage <= maxPagesInResult; currentPage++) {
+                queryBuilder.pageNum(String.valueOf(currentPage));
+                String nextPage = ConnectToAPI.fetchRawJson(queryBuilder);
+                pages.add(nextPage);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching NOTAM pages", e);
+        }
+
+        return pages;
+    }
+
+    /**
+     * Very lightweight JSON inspection to extract "totalPages" from the FAA response
+     * without pulling in extra JSON libraries here.
+     *
+     * Expected shape somewhere in the response:
+     *   "totalPages": 5
+     *
+     * If not found or unparsable, falls back to 1.
+     */
+    private static int extractTotalPages(String json) {
+        if (json == null) {
+            return 1;
+        }
+        final String key = "\"totalPages\":";
+        int idx = json.indexOf(key);
+        if (idx == -1) {
+            return 1;
+        }
+
+        int i = idx + key.length();
+        int len = json.length();
+
+        // Skip whitespace
+        while (i < len && Character.isWhitespace(json.charAt(i))) {
+            i++;
+        }
+        int start = i;
+
+        // Read digits
+        while (i < len && Character.isDigit(json.charAt(i))) {
+            i++;
+        }
+
+        if (start == i) {
+            return 1;
+        }
+
+        try {
+            return Integer.parseInt(json.substring(start, i));
+        } catch (NumberFormatException e) {
+            return 1;
+        }
     }
 
     /**
@@ -159,15 +268,31 @@ public class NotamFetcher {
      * @throws Exception if an error occurs during the API request or response handling
      */
     public String fetchForLocation(double latitude, double longitude, int radiusNm)
-            throws Exception {
+        throws Exception {
 
         final long t0 = System.currentTimeMillis();
 
         // Use ConnectToAPI utility class for reusable HTTP client code
-        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
-                .pageSize("100"); // NotamFetcher uses pageSize 100
+        final List<String> pages = fetchAll(latitude, longitude, radiusNm);
 
-        final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
+        // For this method, return a single String. If there is more than one
+        // page, simply concatenate them with newlines. Route-based callers
+        // still use the List<String> from fetchForRoute(..).
+        final String response;
+        if (pages.isEmpty()) {
+            response = "";
+        } else if (pages.size() == 1) {
+            response = pages.get(0);
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (String page : pages) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(page);
+            }
+            response = sb.toString();
+        }
 
         final long t1 = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
@@ -177,6 +302,7 @@ public class NotamFetcher {
 
         return response;
     }
+
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
      * Accepts both IATA (3-letter) and ICAO (4-letter) local codes.
@@ -193,5 +319,5 @@ public class NotamFetcher {
         }
         return coords.get();
     }
-
 }
+
