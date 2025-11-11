@@ -237,17 +237,17 @@ public class NotamParser {
                     id, number, type, icaoLocation,
                     (latitude != null ? "(" + latitude + ", " + longitude + ")" : "null"));
 
-            return new Notam(
-                    id,
-                    number,
-                    type,
-                    issued,
-                    icaoLocation,
-                    latitude,
-                    longitude,
-                    radiusNm,
-                    text
-            );
+            return new Notam.Builder()
+                    .id(id)
+                    .number(number)
+                    .type(type)
+                    .issued(issued)
+                    .location(icaoLocation)
+                    .latitude(latitude) // nullable
+                    .longitude(longitude) // nullable
+                    .radiusNm(radiusNm)   // nullable
+                    .text(text)
+                    .build();
 
         } catch (final DateTimeParseException e) {
             logger.warn("Error parsing feature due to date parsing error: {}", e.getMessage());

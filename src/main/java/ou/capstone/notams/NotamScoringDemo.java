@@ -102,17 +102,17 @@ public final class NotamScoringDemo {
         ScoredNotam(final String id, final String airport, final String text, final Double distanceNm,
                     final Instant startTime, final Instant endTime, final Instant issuedTime) {
             // Create the official CCS-33 Notam object with available fields
-            this.baseNotam = new Notam(
-                id,
-                "N/A", // number - not available in demo data
-                "DEMO", // type - not available in demo data  
-                issuedTime != null ? issuedTime.atOffset(java.time.ZoneOffset.UTC) : null,
-                airport,
-                0.0, // latitude - not available in demo data
-                0.0, // longitude - not available in demo data
-                distanceNm, // radiusNm - using distanceNm as radius
-                text
-            );
+            this.baseNotam = new Notam.Builder()
+                    .id(id)
+                    .number("N/A") // demo-only
+                    .type("DEMO")
+                    .issued(issuedTime != null ? issuedTime.atOffset(java.time.ZoneOffset.UTC) : null)
+                    .location(airport)
+                    .latitude(null)     // unknown: keep null (avoid 0,0)
+                    .longitude(null)    // unknown: keep null
+                    .radiusNm(distanceNm)
+                    .text(text != null ? text : "")
+                    .build();
             this.distanceNm = distanceNm;
             this.startTime = startTime;
             this.endTime = endTime;
