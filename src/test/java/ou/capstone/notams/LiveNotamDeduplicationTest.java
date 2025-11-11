@@ -1,11 +1,11 @@
 package ou.capstone.notams;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import ou.capstone.notams.api.NotamFetcher;
 import ou.capstone.notams.api.NotamParser;
@@ -28,6 +28,7 @@ public final class LiveNotamDeduplicationTest {
     }
 
     @Test
+    @EnabledIfEnvironmentVariable( named="RUN_LIVE_TESTS", matches = "true" )
     void fetchParseAndDedup_onRoute_KJFK_to_KLAX() throws Exception {
         // Skip if credentials missing (keeps CI green)
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_ID"), "FAA_CLIENT_ID not set; skipping live test");
@@ -58,6 +59,7 @@ public final class LiveNotamDeduplicationTest {
     }
 
     @Test
+    @EnabledIfEnvironmentVariable( named="RUN_LIVE_TESTS", matches = "true" )
     void fetchParseAndDedup_singleLocation_KJFK_radius50nm() throws Exception {
         // Skip if credentials missing
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_ID"), "FAA_CLIENT_ID not set; skipping live test");
