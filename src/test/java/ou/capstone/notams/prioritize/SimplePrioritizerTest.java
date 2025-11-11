@@ -23,20 +23,17 @@ class SimplePrioritizerTest {
         final Double radiusNm,
         final String text
 ) {
-    // NOTE: We use a constant NOTAM “number” of "5/31" in tests because
-    // the prioritizer doesn’t consider the number; keeping it constant
-    // avoids accidental score differences between test NOTAMs.
-    return new Notam(
-            id,
-            "5/31",    // test-only constant; not part of scoring
-            type,
-            java.time.OffsetDateTime.parse(issuedIso),
-            icao,
-            latitude,
-            longitude,
-            radiusNm,
-            text
-    );
+       return new Notam.Builder()
+               .id(id)
+               .number("5/31") // test-only constant; not part of scoring
+               .type(type)
+               .issued(OffsetDateTime.parse(issuedIso))
+               .location(icao)
+               .latitude(latitude)
+               .longitude(longitude)
+               .radiusNm(radiusNm)   // may be null
+               .text(text)
+               .build();
 }
 
     @Test

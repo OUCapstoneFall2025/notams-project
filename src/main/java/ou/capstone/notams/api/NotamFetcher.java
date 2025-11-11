@@ -19,7 +19,8 @@ import ou.capstone.notams.validation.AirportDirectory;
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
  */
-public class NotamFetcher {
+
+ public class NotamFetcher {
 
     private static final Logger logger = LoggerFactory.getLogger(NotamFetcher.class);
 
@@ -34,6 +35,9 @@ public class NotamFetcher {
     // HTTP per-request timeout (seconds), configurable for experimentation
     private static final int HTTP_TIMEOUT_SECONDS =
             Integer.parseInt(System.getenv().getOrDefault("NOTAM_HTTP_TIMEOUT_SECONDS", "30"));
+
+    // Toggleable via JVM property: -DVISUALIZE_ROUTE=true
+    private static final boolean VISUALIZE_ROUTE = Boolean.getBoolean("VISUALIZE_ROUTE");
 
     /**
      * Constructs a NotamFetcher.
@@ -81,6 +85,14 @@ public class NotamFetcher {
 
         List<String> responses = new ArrayList<>();
 
+        // Google Maps visualization toggleable via system properties
+        final long visualizationStart = System.currentTimeMillis();
+        printRouteVisualization(waypoints);
+        final long visualizationEnd = System.currentTimeMillis();
+        if (logger.isDebugEnabled()) {
+            logger.debug("Total visualization creation time across all waypoints: {} ms", visualizationEnd - visualizationStart);
+        }
+
         // Measure total fetch time
         final long fetchStart = System.currentTimeMillis();
 
@@ -113,6 +125,29 @@ public class NotamFetcher {
     }
 
     /**
+     * Prints a Google Maps visualization URL of the route if VISUALIZE_ROUTE is enabled.
+     */
+    private static void printRouteVisualization(List<Coordinate> waypoints) {
+        if (!VISUALIZE_ROUTE || waypoints == null || waypoints.isEmpty()) {
+            return;
+        }
+
+        logger.info("======= ROUTE VISUALIZATION =======");
+        logger.info("Google Maps URL (copy and paste to view):");
+
+        StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
+        for (Coordinate waypoint : waypoints) {
+            mapsUrl.append(waypoint.getLatitude())
+                   .append(",")
+                   .append(waypoint.getLongitude())
+                   .append("/");
+        }
+
+        logger.info(mapsUrl.toString());
+        logger.info("===================================\n");
+    }
+
+    /**
      * Fetches NOTAMs (Notice to Airmen) for a specified geographic location and radius.
      * Uses ConnectToAPI utility class to eliminate duplicate HTTP client code.
      * The response is returned in GeoJSON format.
@@ -142,25 +177,19 @@ public class NotamFetcher {
 
         return response;
     }
-
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
-     * Accepts both IATA (3-letter) and ICAO (4-letter) codes.
+     * Accepts both IATA (3-letter) and ICAO (4-letter) local codes.
      * Uses the AirportDirectory to look up coordinates from the airport CSV database.
      *
-     * @param airportCode the IATA or ICAO code of the airport
+     * @param airportCode the code of the airport
      * @return an array containing latitude and longitude as [lat, lon]
      * @throws IllegalArgumentException if the airport code is not found
      */
     private Coordinate getAirportCoordinates(String airportCode) {
-        // Convert to ICAO code for FAA API compatibility
-        String icaoCode = airportDirectory.getIcaoCode(airportCode);
-        if (icaoCode == null) {
-            throw new IllegalArgumentException("Unknown airport: " + airportCode);
-        }
-        Optional<Coordinate> coords = airportDirectory.getCoordinates(icaoCode);
+        Optional<Coordinate> coords = airportDirectory.getCoordinates(airportCode);
         if (coords.isEmpty()) {
-            throw new IllegalArgumentException("No coordinates found for airport: " + icaoCode);
+            throw new IllegalArgumentException("No coordinates found for airport: " + airportCode);
         }
         return coords.get();
     }

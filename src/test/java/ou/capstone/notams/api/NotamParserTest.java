@@ -360,9 +360,10 @@ class NotamParserTest {
 
         final List<Notam> notams = parser.parseGeoJson(geoJson);
 
-        // Should skip NOTAMs with missing geometry instead of using (0,0) coordinates
-        // This prevents using a real location (Gulf of Guinea) as fallback data
-        assertEquals(0, notams.size());
+        assertEquals(1, notams.size());
+        assertNull(notams.get(0).getLatitude());
+        assertNull(notams.get(0).getLongitude());
+        assertEquals("N456", notams.get(0).getId());
     }
 
     @Test
@@ -396,8 +397,11 @@ class NotamParserTest {
 
         final List<Notam> notams = parser.parseGeoJson(geoJson);
 
-        // Should skip NOTAMs with invalid coordinate ranges
-        assertEquals(0, notams.size());
+        // Should preserve NOTAM with null coordinates for flight safety
+        assertEquals(1, notams.size());
+        assertNull(notams.get(0).getLatitude());
+        assertNull(notams.get(0).getLongitude());
+        assertEquals("N789", notams.get(0).getId());
     }
 
     @Test

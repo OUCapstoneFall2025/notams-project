@@ -136,17 +136,17 @@ public class GeoJsonReader {
             return null;
         }
 
-        return new Notam(
-                id,
-                number,
-                type,
-                issued,
-                icaoLocation,
-                latitude,
-                longitude,
-                radiusNm,
-                text
-        );
+        return new Notam.Builder()
+                .id(id)
+                .number(number)
+                .type(type)
+                .issued(issued)
+                .location(icaoLocation)
+                .latitude(latitude)
+                .longitude(longitude)
+                .radiusNm(radiusNm)
+                .text(text)
+                .build();
     }
 
     private String parseText(final JsonNode parent, final String key) {

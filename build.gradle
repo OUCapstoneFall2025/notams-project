@@ -58,3 +58,7 @@ task integrationTest(type: Test) {
         includeTestsMatching "*fetchesLiveNotams*"
     }
 }
+
+tasks.named('run') {
+    systemProperty "VISUALIZE_ROUTE", System.getProperty("VISUALIZE_ROUTE")
+}
