@@ -28,23 +28,25 @@ final class GeoJsonReaderTest {
     void fetchesMockNotams_viaConnectToAPI_andParses() throws Exception {
         logger.info("Fetching mock NOTAMs via ConnectToAPI");
         
-        // Load mock data from test resources
-        final List<Notam> mockNotams = loadMockNotamsFromResources();
+        // Load mock JSON from test resources
+        final String mockJson = loadMockJsonFromResources();
         
-        // Mock ConnectToAPI.fetchNotams() to return mock data
+        // Mock ConnectToAPI.fetchRawJson() to return mock JSON
         try (MockedStatic<ConnectToAPI> mockedConnectToAPI = Mockito.mockStatic(ConnectToAPI.class)) {
-            mockedConnectToAPI.when(ConnectToAPI::fetchNotams)
-                    .thenReturn(mockNotams);
+            mockedConnectToAPI.when(() -> ConnectToAPI.fetchRawJson(any(ConnectToAPI.QueryParamsBuilder.class)))
+                    .thenReturn(mockJson);
             
-            // Call the mocked method
-            List<Notam> notams = ConnectToAPI.fetchNotams();
+            // Call the mocked method and parse
+            final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder("KOKC");
+            final String json = ConnectToAPI.fetchRawJson(queryParams);
+            final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(json);
             
             assertNotNull(notams, "Parsed list should not be null");
             assertFalse(notams.isEmpty(), "Should have at least one mock NOTAM");
             logger.info("Successfully parsed {} mock NOTAMs", notams.size());
             
             // Verify the mock was called
-            mockedConnectToAPI.verify(ConnectToAPI::fetchNotams, times(1));
+            mockedConnectToAPI.verify(() -> ConnectToAPI.fetchRawJson(any(ConnectToAPI.QueryParamsBuilder.class)), times(1));
         }
     }
 
@@ -54,20 +56,21 @@ final class GeoJsonReaderTest {
     void fetchesLiveNotams_viaConnectToAPI_andParses() throws Exception {
         logger.info("Fetching live NOTAMs via ConnectToAPI");
         // This test requires live API access and should be run with integrationTest task
-        // which sets ConnectToApi.UseLiveData system property
         // This test calls ConnectToAPI directly without mocking
-        List<Notam> notams = ConnectToAPI.fetchNotams();
+        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder("KOKC");
+        final String json = ConnectToAPI.fetchRawJson(queryParams);
+        final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(json);
         assertNotNull(notams, "Parsed list should not be null");
     }
 
     /**
-     * Loads mock NOTAM data from test resources.
-     * This helper method reads the mock-faa-response.json file and parses it.
+     * Loads mock NOTAM JSON data from test resources.
+     * Returns the raw JSON string.
      *
-     * @return List of parsed Notam objects from the mock data
-     * @throws Exception if the mock data file cannot be read or parsed
+     * @return The raw JSON string from the mock data file
+     * @throws Exception if the mock data file cannot be read
      */
-    private List<Notam> loadMockNotamsFromResources() throws Exception {
+    private String loadMockJsonFromResources() throws Exception {
         try (final InputStream inputStream = GeoJsonReaderTest.class.getClassLoader()
                 .getResourceAsStream("mock-faa-response.json")) {
             
@@ -75,8 +78,7 @@ final class GeoJsonReaderTest {
                 throw new IllegalStateException("Mock data file 'mock-faa-response.json' not found in test resources");
             }
             
-            final String mockJson = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            return new GeoJsonReader().parseNotamsFromGeoJson(mockJson);
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 }
