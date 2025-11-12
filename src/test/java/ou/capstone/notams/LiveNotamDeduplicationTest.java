@@ -1,6 +1,5 @@
 package ou.capstone.notams;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Assumptions;
@@ -8,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import ou.capstone.notams.api.NotamFetcher;
-import ou.capstone.notams.api.NotamParser;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public final class LiveNotamDeduplicationTest {
 
-    private static boolean hasEnv(String key) {
-        String v = System.getenv(key);
+    private static boolean hasEnv(final String key) {
+        final String v = System.getenv(key);
         return v != null && !v.isBlank();
     }
 
@@ -34,48 +32,41 @@ public final class LiveNotamDeduplicationTest {
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_ID"), "FAA_CLIENT_ID not set; skipping live test");
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_SECRET"), "FAA_CLIENT_SECRET not set; skipping live test");
 
-        NotamFetcher fetcher = new NotamFetcher();
-        NotamParser parser   = new NotamParser();
+        final NotamFetcher fetcher = new NotamFetcher();
 
-        // Fetch multiple GeoJSON pages along the route
-        List<String> pages = fetcher.fetchForRoute("KJFK", "KLAX");
+        // Fetch NOTAMs along the route (already parsed by NotamFetcher)
+        final List<Notam> allNotams = fetcher.fetchForRoute("KJFK", "KLAX");
 
-        List<Notam> parsedAll = new ArrayList<>();
-        for (String geoJson : pages) {
-            parsedAll.addAll(parser.parseGeoJson(geoJson));
-        }
+        // Deduplicate
+        final List<Notam> unique = NotamDeduplication.dedup(allNotams);
 
-        List<Notam> unique = NotamDeduplication.dedup(parsedAll);
-
-
-        assertFalse(parsedAll.isEmpty(), "Expected some live NOTAMs along the route");
-        assertTrue(unique.size() <= parsedAll.size(), "Deduped size must not exceed parsed size");
+        assertFalse(allNotams.isEmpty(), "Expected some live NOTAMs along the route");
+        assertTrue(unique.size() <= allNotams.size(), "Deduped size must not exceed parsed size");
 
         System.out.println("\n[Live FAA Route Test]");
         System.out.println("Leg: KJFK -> KLAX");
-        System.out.println("Pages fetched: " + pages.size());
-        System.out.println("Parsed count: " + parsedAll.size());
+        System.out.println("Parsed count: " + allNotams.size());
         System.out.println("Unique count: " + unique.size());
     }
 
     @Test
-    @EnabledIfEnvironmentVariable( named="RUN_LIVE_TESTS", matches = "true" )
+    @EnabledIfEnvironmentVariable(named = "RUN_LIVE_TESTS", matches = "true")
     void fetchParseAndDedup_singleLocation_KJFK_radius50nm() throws Exception {
         // Skip if credentials missing
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_ID"), "FAA_CLIENT_ID not set; skipping live test");
         Assumptions.assumeTrue(hasEnv("FAA_CLIENT_SECRET"), "FAA_CLIENT_SECRET not set; skipping live test");
 
-        double lat = 40.6413;
-        double lon = -73.7781;
-        int radiusNm = 50;
+        final double lat = 40.6413;
+        final double lon = -73.7781;
+        final int radiusNm = 50;
 
-        NotamFetcher fetcher = new NotamFetcher();
-        NotamParser parser   = new NotamParser();
+        final NotamFetcher fetcher = new NotamFetcher();
 
-        String geoJson = fetcher.fetchForLocation(lat, lon, radiusNm);
+        // Fetch NOTAMs for location (already parsed by NotamFetcher)
+        final List<Notam> parsed = fetcher.fetchForLocation(lat, lon, radiusNm);
 
-        List<Notam> parsed = parser.parseGeoJson(geoJson);
-        List<Notam> unique = NotamDeduplication.dedup(parsed);
+        // Deduplicate
+        final List<Notam> unique = NotamDeduplication.dedup(parsed);
 
         assertFalse(parsed.isEmpty(), "Expected some live NOTAMs near KJFK");
         assertTrue(unique.size() <= parsed.size(), "Deduped size must not exceed parsed size");
