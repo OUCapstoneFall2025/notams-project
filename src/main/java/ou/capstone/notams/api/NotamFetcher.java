@@ -1,12 +1,5 @@
 package ou.capstone.notams.api;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +7,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ou.capstone.notams.ConnectToAPI;
 import ou.capstone.notams.route.Coordinate;
 import ou.capstone.notams.route.RouteCalculator;
 import ou.capstone.notams.validation.AirportDirectory;
@@ -21,19 +15,14 @@ import ou.capstone.notams.validation.AirportDirectory;
 /**
  * Fetches raw NOTAM data from the FAA API for given routes and airports.
  * CCS-16: Responsible for API connection and data retrieval along flight routes.
- * Requires FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables to be set.
- * If either is missing, the constructor will throw IllegalStateException.
+ * Credential validation is handled by ConnectToAPI when making API calls.
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
  */
 
- public class NotamFetcher {
+public class NotamFetcher {
 
     private static final Logger logger = LoggerFactory.getLogger(NotamFetcher.class);
-
-    private final String clientId;
-    private final String clientSecret;
-    private final HttpClient httpClient;
 
     private final AirportDirectory airportDirectory;
 
@@ -52,20 +41,9 @@ import ou.capstone.notams.validation.AirportDirectory;
 
     /**
      * Constructs a NotamFetcher.
-     * Requires FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables to be set.
+     * Credential validation is handled by ConnectToAPI when making API calls.
      */
     public NotamFetcher() {
-        this.clientId = System.getenv("FAA_CLIENT_ID");
-        this.clientSecret = System.getenv("FAA_CLIENT_SECRET");
-        if (clientId == null || clientSecret == null) {
-            throw new IllegalStateException(
-                "FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
-        }
-        this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
-
         this.airportDirectory = new AirportDirectory();
     }
 
@@ -171,7 +149,7 @@ import ou.capstone.notams.validation.AirportDirectory;
 
     /**
      * Fetches NOTAMs (Notice to Airmen) for a specified geographic location and radius.
-     * Sends a GET request to the FAA NOTAM API using the provided latitude, longitude, and radius in nautical miles.
+     * Uses ConnectToAPI utility class to eliminate duplicate HTTP client code.
      * The response is returned in GeoJSON format.
      *
      * @param latitude   the latitude of the location to fetch NOTAMs for
@@ -185,42 +163,19 @@ import ou.capstone.notams.validation.AirportDirectory;
 
         final long t0 = System.currentTimeMillis();
 
-        String queryString = String.format(
-            "responseFormat=%s&latitude=%s&longitude=%s&radius=%s&pageSize=%s&sortBy=%s&sortOrder=%s",
-            enc("geoJson"),
-            enc(String.valueOf(latitude)),
-            enc(String.valueOf(longitude)),
-            enc(String.valueOf(radiusNm)),
-            enc("100"),
-            enc("effectiveStartDate"),
-            enc("Desc")
-        );
+        // Use ConnectToAPI utility class for reusable HTTP client code
+        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
+                .pageSize("100"); // NotamFetcher uses pageSize 100
 
-        URI uri = new URI("https", "external-api.faa.gov",
-            "/notamapi/v1/notams", queryString, null);
-
-        HttpRequest request = HttpRequest.newBuilder(uri)
-            .GET()
-            .header("client_id", clientId)
-            .header("client_secret", clientSecret)
-            .timeout(Duration.ofSeconds(HTTP_TIMEOUT_SECONDS))
-            .build();
-
-        HttpResponse<String> response = httpClient.send(request,
-            HttpResponse.BodyHandlers.ofString());
+        final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
 
         final long t1 = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
-            logger.debug("Single HTTP fetch took {} ms (status {})",
-                    (t1 - t0), response.statusCode());
+            logger.debug("Single HTTP fetch took {} ms",
+                    (t1 - t0));
         }
 
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("API error for location (" + latitude + ", " + longitude + "): "
-                + response.statusCode() + " - " + response.body());
-        }
-
-        return response.body();
+        return response;
     }
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
@@ -239,19 +194,4 @@ import ou.capstone.notams.validation.AirportDirectory;
         return coords.get();
     }
 
-    /**
-     * URL-encodes a string for safe use as an HTTP query parameter.
-     * 
-     * @param s the string to encode
-     * @return the URL-encoded string
-     * @throws RuntimeException if UTF-8 encoding is not supported (should never happen)
-     */
-    private static String enc(String s) {
-        try {
-            return URLEncoder.encode(s, StandardCharsets.UTF_8.name());
-        } catch (java.io.UnsupportedEncodingException e) {
-            // UTF-8 is always supported, so this should never happen
-            throw new RuntimeException("UTF-8 encoding not supported", e);
-        }
-    }
 }
