@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import javax.naming.RefAddr;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,8 +103,13 @@ public class NotamFetcher {
             final long singleFetchStart = System.currentTimeMillis();
 
             // Fetch ALL pages for the waypoint (adds to responses); keeps the single-page method intact.
-            List<String> pages = fetchAllForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
+			// TODO need to fix this
+//            List<String> pages = fetchAllForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
+
+			List<String> pages = fetchAll(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM );
+			//List<String> pages = ConnectToAPI.fetchAll();
             responses.addAll(pages);
+
 
             final long singleFetchEnd = System.currentTimeMillis();
             if (logger.isDebugEnabled()) {
@@ -127,7 +134,45 @@ public class NotamFetcher {
         return responses;
     }
 
-    /**
+	private List<String> fetchAll( final String airportCode ) {
+		ConnectToAPI.QueryParamsBuilder queryBuilder = new ConnectToAPI.QueryParamsBuilder( airportCode );
+		queryBuilder.pageNum( "1" );
+		return fetchAll(queryBuilder);
+	}
+
+	private List<String> fetchAll( double latitude, double longitude, int queryRadiusNm )
+	{
+		ConnectToAPI.QueryParamsBuilder queryBuilder = new ConnectToAPI.QueryParamsBuilder( latitude, longitude,queryRadiusNm );
+		queryBuilder.pageNum( "1" );
+		return fetchAll(queryBuilder);
+	}
+
+	private List<String> fetchAll( final ConnectToAPI.QueryParamsBuilder queryBuilder )
+	{
+		List<String> pages = new ArrayList<>();
+
+		try {
+			String result = ConnectToAPI.fetchRawJson( queryBuilder );
+		}
+		catch( Exception e ) {
+			throw new RuntimeException( e );
+		}
+
+		pages.add( result );
+
+		// do I have more pages to fetch?
+		// inspect result
+		// find the total number of pages
+
+		while (  currentPage <= maxPagesInResult ) {
+			queryBuilder.pageNum( currentPage );
+			String nextPage = ConnectToAPI.fetchRawJson( queryBuilder );
+			pages.add(nextPage);
+		}
+		return pages;
+	}
+
+	/**
      * Prints a Google Maps visualization URL of the route if VISUALIZE_ROUTE is enabled.
      */
     private static void printRouteVisualization(List<Coordinate> waypoints) {
@@ -167,10 +212,9 @@ public class NotamFetcher {
         final long t0 = System.currentTimeMillis();
 
         // Use ConnectToAPI utility class for reusable HTTP client code
-        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
-                .pageSize("100"); // NotamFetcher uses pageSize 100
+		final List<String> pages = fetchAll( latitude,longitude, radiusNm);
+		final String
 
-        final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
 
         final long t1 = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
@@ -203,70 +247,70 @@ public class NotamFetcher {
     // These do not remove or change any existing comments or behavior.
     // ------------------------------------------------------------------
 
-    // Configurable page size and hard cap on total pages (safety guard).
-    private static final int PAGE_SIZE = Integer.parseInt(System.getenv().getOrDefault("NOTAM_PAGE_SIZE", "500"));
-    private static final int MAX_PAGES = Integer.parseInt(System.getenv().getOrDefault("NOTAM_MAX_PAGES", "200"));
+//    // Configurable page size and hard cap on total pages (safety guard).
+//    private static final int PAGE_SIZE = Integer.parseInt(System.getenv().getOrDefault("NOTAM_PAGE_SIZE", "500"));
+//    private static final int MAX_PAGES = Integer.parseInt(System.getenv().getOrDefault("NOTAM_MAX_PAGES", "200"));
+//
+//    /**
+//     * Fetch ALL pages of NOTAMs for a given location (radiusNm) by iterating page=1..MAX_PAGES.
+//     * Returns a list of raw response bodies (GeoJSON strings), one per page.
+//     * Keeps the original single-page method available and unchanged.
+//     */
+//    public List<String> fetchAllForLocation(double latitude, double longitude, int radiusNm) throws Exception {
+//        List<String> pages = new ArrayList<>();
+//        for (int page = 1; page <= MAX_PAGES; page++) {
+//            String body = fetchPageForLocation(latitude, longitude, radiusNm, page, PAGE_SIZE);
+//            pages.add(body);
+//
+//            // If consumers later parse JSON, a robust break is: if (features.size() < PAGE_SIZE) break;
+//            // As a lightweight hint without parsing, stop early on small bodies.
+//            if (body.length() < 10_000) {
+//                break;
+//            }
+//        }
+//        return pages;
+//    }
 
-    /**
-     * Fetch ALL pages of NOTAMs for a given location (radiusNm) by iterating page=1..MAX_PAGES.
-     * Returns a list of raw response bodies (GeoJSON strings), one per page.
-     * Keeps the original single-page method available and unchanged.
-     */
-    public List<String> fetchAllForLocation(double latitude, double longitude, int radiusNm) throws Exception {
-        List<String> pages = new ArrayList<>();
-        for (int page = 1; page <= MAX_PAGES; page++) {
-            String body = fetchPageForLocation(latitude, longitude, radiusNm, page, PAGE_SIZE);
-            pages.add(body);
-
-            // If consumers later parse JSON, a robust break is: if (features.size() < PAGE_SIZE) break;
-            // As a lightweight hint without parsing, stop early on small bodies.
-            if (body.length() < 10_000) {
-                break;
-            }
-        }
-        return pages;
-    }
-
-    /**
-     * Fetch a single page with explicit page & pageSize.
-     * Leaves the original fetchForLocation(...) intact.
-     */
-    private String fetchPageForLocation(double latitude, double longitude, int radiusNm, int page, int pageSize) throws Exception {
-        final long t0 = System.currentTimeMillis();
-
-        String queryString = String.format(
-            "responseFormat=%s&latitude=%s&longitude=%s&radius=%s&page=%s&pageSize=%s",
-            enc("geoJson"),
-            enc(String.valueOf(latitude)),
-            enc(String.valueOf(longitude)),
-            enc(String.valueOf(radiusNm)),
-            enc(String.valueOf(page)),
-            enc(String.valueOf(pageSize))
-        );
-
-        URI uri = new URI("https", "external-api.faa.gov",
-            "/notamapi/v1/notams", queryString, null);
-
-        HttpRequest request = HttpRequest.newBuilder(uri)
-            .GET()
-            .header("client_id", clientId)
-            .header("client_secret", clientSecret)
-            .timeout(Duration.ofSeconds(HTTP_TIMEOUT_SECONDS))
-            .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        final long t1 = System.currentTimeMillis();
-        if (logger.isDebugEnabled()) {
-            logger.debug("Paged HTTP fetch took {} ms (status {}, page {}, size {})",
-                    (t1 - t0), response.statusCode(), page, pageSize);
-        }
-
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("API error for location (" + latitude + ", " + longitude + "): "
-                + response.statusCode() + " - " + response.body());
-        }
-
-        return response.body();
-    }
+//    /**
+//     * Fetch a single page with explicit page & pageSize.
+//     * Leaves the original fetchForLocation(...) intact.
+//     */
+//    private String fetchPageForLocation(double latitude, double longitude, int radiusNm, int page, int pageSize) throws Exception {
+//        final long t0 = System.currentTimeMillis();
+//
+//        String queryString = String.format(
+//            "responseFormat=%s&latitude=%s&longitude=%s&radius=%s&page=%s&pageSize=%s",
+//            enc("geoJson"),
+//            enc(String.valueOf(latitude)),
+//            enc(String.valueOf(longitude)),
+//            enc(String.valueOf(radiusNm)),
+//            enc(String.valueOf(page)),
+//            enc(String.valueOf(pageSize))
+//        );
+//
+//        URI uri = new URI("https", "external-api.faa.gov",
+//            "/notamapi/v1/notams", queryString, null);
+//
+//        HttpRequest request = HttpRequest.newBuilder(uri)
+//            .GET()
+//            .header("client_id", clientId)
+//            .header("client_secret", clientSecret)
+//            .timeout(Duration.ofSeconds(HTTP_TIMEOUT_SECONDS))
+//            .build();
+//
+//        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+//
+//        final long t1 = System.currentTimeMillis();
+//        if (logger.isDebugEnabled()) {
+//            logger.debug("Paged HTTP fetch took {} ms (status {}, page {}, size {})",
+//                    (t1 - t0), response.statusCode(), page, pageSize);
+//        }
+//
+//        if (response.statusCode() != 200) {
+//            throw new RuntimeException("API error for location (" + latitude + ", " + longitude + "): "
+//                + response.statusCode() + " - " + response.body());
+//        }
+//
+//        return response.body();
+//    }
 }
