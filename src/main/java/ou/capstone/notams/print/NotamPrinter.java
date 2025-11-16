@@ -102,9 +102,9 @@ public class NotamPrinter {
                           .reversed();
 
         sorted.sort(
-                Comparator.comparing(NotamView::location, String.CASE_INSENSITIVE_ORDER)
-                          .thenComparing(byScoreDesc)
-                          .thenComparing(NotamView::startTimeUtc, Comparator.nullsLast(Comparator.naturalOrder()))
+                Comparator.comparing(NotamView::location, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                        .thenComparing(byScoreDesc)
+                        .thenComparing(NotamView::startTimeUtc, Comparator.nullsLast(Comparator.naturalOrder()))
         );
 
         // Compute rank cutoffs from percentages
