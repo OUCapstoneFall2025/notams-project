@@ -8,16 +8,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import ou.capstone.notams.ConnectToAPI;
+import ou.capstone.notams.ConnectToAPI.QueryParamsBuilder;
+import ou.capstone.notams.Notam;
 import ou.capstone.notams.route.Coordinate;
 import ou.capstone.notams.route.RouteCalculator;
 import ou.capstone.notams.validation.AirportDirectory;
 
 /**
- * Fetches raw NOTAM data from the FAA API for given routes and airports.
+ * Uses ConnectToAPI for all FAA NOTAM queries and converts JSON into NOTAM objects using NotamParser.
  * CCS-16: Responsible for API connection and data retrieval along flight routes.
  * Credential validation is handled by ConnectToAPI when making API calls.
  *
  * CCS-61: Added lightweight profiling logs to identify where time is spent.
+ * 
+ * CCS-51: Refactor to integrate reusable API utility and parsing layer.
  */
 
 public class NotamFetcher {
@@ -39,6 +43,8 @@ public class NotamFetcher {
     // Toggleable via JVM property: -DVISUALIZE_ROUTE=true
     private static final boolean VISUALIZE_ROUTE = Boolean.getBoolean("VISUALIZE_ROUTE");
 
+    private static final NotamParser parser = new NotamParser();
+
     /**
      * Constructs a NotamFetcher.
      * Credential validation is handled by ConnectToAPI when making API calls.
@@ -48,28 +54,28 @@ public class NotamFetcher {
     }
 
     /**
-     * Fetch raw NOTAM JSON data for a flight route between two airports.
+     * Fetch list of NOTAMs for a flight route between two airports.
      * Queries along the great-circle route using waypoints.
      *
      * @param departureCode IATA or ICAO code of the departure airport
      * @param destinationCode IATA or ICAO code of the destination airport
      */
-    public List<String> fetchForRoute(String departureCode, String destinationCode)
+    public List<Notam> fetchForRoute(String departureCode, String destinationCode)
             throws Exception {
 
         final long overallStart = System.currentTimeMillis();
 
-        // Measure airport lookup
+        // Airport lookup
         final long airportStart = System.currentTimeMillis();
-        Coordinate depCoords = getAirportCoordinates(departureCode);
-        Coordinate destCoords = getAirportCoordinates(destinationCode);
+        final Coordinate depCoords = getAirportCoordinates(departureCode);
+        final Coordinate destCoords = getAirportCoordinates(destinationCode);
         final long airportEnd = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
             logger.debug("Airport coordinate lookup took {} ms ({} -> {}, {} -> {})",
                     (airportEnd - airportStart), departureCode, depCoords, destinationCode, destCoords);
         }
 
-        // Measure waypoint calculation
+        // Waypoint calculation
         final long waypointStart = System.currentTimeMillis();
         List<Coordinate> waypoints = RouteCalculator.getRouteWaypoints(
                 depCoords.getLatitude(), depCoords.getLongitude(),
@@ -83,8 +89,6 @@ public class NotamFetcher {
                     (waypointEnd - waypointStart), waypoints.size(), WAYPOINT_SPACING_NM, Math.round(approxPathLengthNm));
         }
 
-        List<String> responses = new ArrayList<>();
-
         // Google Maps visualization toggleable via system properties
         final long visualizationStart = System.currentTimeMillis();
         printRouteVisualization(waypoints);
@@ -93,21 +97,35 @@ public class NotamFetcher {
             logger.debug("Total visualization creation time across all waypoints: {} ms", visualizationEnd - visualizationStart);
         }
 
-        // Measure total fetch time
+        // Fetch NOTAMs
         final long fetchStart = System.currentTimeMillis();
-
+        List<Notam> notams = new ArrayList<>();
         int index = 1;
         for (Coordinate waypoint : waypoints) {
             final long singleFetchStart = System.currentTimeMillis();
-            String response = fetchForLocation(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM);
+            List<Notam> waypointNotams = java.util.Collections.emptyList();
+
+            try {
+                final QueryParamsBuilder queryParams =
+                    new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize("200");
+                final String rawJson = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
+                waypointNotams = parser.parseGeoJson(rawJson);
+                notams.addAll(waypointNotams);
+            } catch (final Exception e) {
+                logger.warn("Skipping waypoint ({}, {}) due to error: {}",
+                        waypoint.getLatitude(), waypoint.getLongitude(), e.getMessage());
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Stack trace for failed waypoint:", e);
+                }
+            }
+
             final long singleFetchEnd = System.currentTimeMillis();
             if (logger.isDebugEnabled()) {
-                logger.debug("Fetch {}/{} at ({}, {}) took {} ms",
+                logger.debug("Fetch {}/{} at ({}, {}) took {} ms ({} NOTAMs)",
                         index++, waypoints.size(),
                         waypoint.getLatitude(), waypoint.getLongitude(),
-                        (singleFetchEnd - singleFetchStart));
+                        (singleFetchEnd - singleFetchStart), waypointNotams.size());
             }
-            responses.add(response);
         }
 
         final long fetchEnd = System.currentTimeMillis();
@@ -121,7 +139,7 @@ public class NotamFetcher {
             logger.debug("Total fetchForRoute() time: {} ms", (overallEnd - overallStart));
         }
 
-        return responses;
+        return notams;
     }
 
     /**
@@ -135,7 +153,7 @@ public class NotamFetcher {
         logger.info("======= ROUTE VISUALIZATION =======");
         logger.info("Google Maps URL (copy and paste to view):");
 
-        StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
+        final StringBuilder mapsUrl = new StringBuilder("https://www.google.com/maps/dir/");
         for (Coordinate waypoint : waypoints) {
             mapsUrl.append(waypoint.getLatitude())
                    .append(",")
@@ -158,25 +176,27 @@ public class NotamFetcher {
      * @return           the API response body as a String in GeoJSON format
      * @throws Exception if an error occurs during the API request or response handling
      */
-    public String fetchForLocation(double latitude, double longitude, int radiusNm)
+    public List<Notam> fetchForLocation(double latitude, double longitude, int radiusNm)
             throws Exception {
 
         final long t0 = System.currentTimeMillis();
 
         // Use ConnectToAPI utility class for reusable HTTP client code
         final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
-                .pageSize("100"); // NotamFetcher uses pageSize 100
+                .pageSize("200");
 
         final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
+        List<Notam> waypointNotams = parser.parseGeoJson(response);
 
         final long t1 = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
-            logger.debug("Single HTTP fetch took {} ms",
-                    (t1 - t0));
+            logger.debug("Single HTTP fetch took {} ms ({} NOTAMs)",
+                    (t1 - t0), waypointNotams.size());
         }
 
-        return response;
+        return waypointNotams;
     }
+
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
      * Accepts both IATA (3-letter) and ICAO (4-letter) local codes.
@@ -187,7 +207,7 @@ public class NotamFetcher {
      * @throws IllegalArgumentException if the airport code is not found
      */
     private Coordinate getAirportCoordinates(String airportCode) {
-        Optional<Coordinate> coords = airportDirectory.getCoordinates(airportCode);
+        final Optional<Coordinate> coords = airportDirectory.getCoordinates(airportCode);
         if (coords.isEmpty()) {
             throw new IllegalArgumentException("No coordinates found for airport: " + airportCode);
         }

@@ -1,7 +1,6 @@
 package ou.capstone.notams;
 
 import ou.capstone.notams.api.NotamFetcher;
-import ou.capstone.notams.api.NotamParser;
 import ou.capstone.notams.validation.AirportValidator;
 import ou.capstone.notams.validation.ValidationResult;
 import ou.capstone.notams.prioritize.NotamPrioritizer;
@@ -13,7 +12,6 @@ import ou.capstone.notams.print.NotamColorPrinter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -146,33 +144,22 @@ public final class App {
 
             logger.info("Using validated codes for API: {} to {}", validatedDepartureCode, validatedDestinationCode);
             final NotamFetcher fetcher = new NotamFetcher();
-            final List<String> apiResponses = fetcher.fetchForRoute(validatedDepartureCode, validatedDestinationCode);
-
-            logger.info("Fetched {} API responses", apiResponses.size());
-
-            // Step 4: Parse NOTAMs (delegated to NotamParser)
-            final NotamParser parser = new NotamParser();
-            final List<Notam> allNotams = new ArrayList<>();
-
-            for (final String response : apiResponses) {
-                final List<Notam> parsedNotams = parser.parseGeoJson(response);
-                allNotams.addAll(parsedNotams);
-            }
-
-            logger.info("Parsed {} NOTAMs", allNotams.size());
+            final List<Notam> notams = fetcher.fetchForRoute(validatedDepartureCode, validatedDestinationCode);
+            // NOTAMs are parsed in NotamFetcher
+            logger.info("Fetched {} NOTAMs", notams.size());
             
-            // Step 5: Deduplication
-            final List<Notam> uniqueNotams = NotamDeduplication.dedup(allNotams);
+            // Step 4: Deduplication
+            final List<Notam> uniqueNotams = NotamDeduplication.dedup(notams);
             logger.info("Dedup result: {} → {} unique NOTAMs",
-                    allNotams.size(), uniqueNotams.size());
+                    notams.size(), uniqueNotams.size());
          
-            // Step 6: Prioritize NOTAMs (delegated to SimplePrioritizer)
+            // Step 5: Prioritize NOTAMs (delegated to SimplePrioritizer)
             final NotamPrioritizer prioritizer = new SimplePrioritizer();
             final List<Notam> prioritizedNotams = prioritizer.prioritize(uniqueNotams);
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
 
-            // Step 7: Display results
+            // Step 6: Display results
             displayResults(prioritizedNotams, departureCode, destinationCode);
 
             logger.info("NOTAM Prioritization System completed successfully");
@@ -182,19 +169,16 @@ public final class App {
             System.err.println("\nConfiguration Error: " + e.getMessage());
             System.err.println("Please ensure FAA_CLIENT_ID and FAA_CLIENT_SECRET environment variables are set.");
             exitHandler.exit(1);
-            return;
 
         } catch (final IllegalArgumentException e) {
             logger.error("Invalid input: {}", e.getMessage());
             System.err.println("\nError: " + e.getMessage());
             exitHandler.exit(1);
-            return;
 
         } catch (final Exception e) {
             logger.error("Unexpected error during execution", e);
             System.err.println("\nUnexpected Error: " + e.getMessage());
             exitHandler.exit(1);
-            return;
         }
     }
 
@@ -214,10 +198,10 @@ public final class App {
         System.out.println("Sorted by Priority (Most Important First)");
         System.out.println("=".repeat(80));
         System.out.println();
-        
+
         // Map domain -> printer DTOs (score is left null)
 
-        final List<NotamView> views = (prioritizedNotams == null) 
+        final List<NotamView> views = (prioritizedNotams == null)
         		? Collections.emptyList()
                 : prioritizedNotams.stream()
                     .map(n -> {
@@ -234,7 +218,7 @@ public final class App {
                     })
                     .collect(Collectors.toList());
 
-        
+
         final NotamPrinter printer = new NotamColorPrinter(ZoneId.systemDefault(), TimeMode.BOTH);
 
         printer.print(views);
@@ -264,7 +248,7 @@ public final class App {
      * @return the airport code
      */
     private static String getCodeFromValidation(final ValidationResult result) {
-        if (!result.isOk() || !result.airport().isPresent()) {
+        if (!result.isOk() || result.airport().isEmpty()) {
             throw new IllegalStateException("Cannot extract code from invalid validation result");
         }
         return result.airport().get().code();
