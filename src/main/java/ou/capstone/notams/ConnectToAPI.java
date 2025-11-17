@@ -32,8 +32,6 @@ public final class ConnectToAPI {
     private static final String RESPONSE_FORMAT = "geoJson";
     private static final String DEFAULT_PAGE_SIZE = "50";
     private static final String DEFAULT_PAGE_NUM = "1";
-    private static final String SORT_BY = "effectiveStartDate";
-    private static final String SORT_ORDER = "Desc";
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_RADIUS_NM = 50;
@@ -78,8 +76,8 @@ public final class ConnectToAPI {
         private final Integer radiusNm;
         private String pageSize = DEFAULT_PAGE_SIZE;
         private String pageNum = DEFAULT_PAGE_NUM;
-        private String sortBy = SORT_BY;
-        private String sortOrder = SORT_ORDER;
+        private final String sortBy = "effectiveStartDate";
+        private final String sortOrder = "Desc";
 
         /**
          * Creates a builder for ICAO location-based queries.
@@ -143,28 +141,6 @@ public final class ConnectToAPI {
         }
 
         /**
-         * Sets the sort field.
-         *
-         * @param sortBy The field to sort by (default: "effectiveStartDate")
-         * @return this builder for method chaining
-         */
-        public QueryParamsBuilder sortBy(final String sortBy) {
-            this.sortBy = sortBy;
-            return this;
-        }
-
-        /**
-         * Sets the sort order.
-         *
-         * @param sortOrder The sort order - "Asc" or "Desc" (default: "Desc")
-         * @return this builder for method chaining
-         */
-        public QueryParamsBuilder sortOrder(final String sortOrder) {
-            this.sortOrder = sortOrder;
-            return this;
-        }
-
-        /**
          * Builds the query string from the parameters.
          *
          * @return The URL-encoded query string
@@ -180,9 +156,9 @@ public final class ConnectToAPI {
             } else {
                 logger.debug("Building coordinate-based query: lat={}, lon={}, radius={}nm",
                         latitude, longitude, radiusNm);
-                params.add("latitude=" + enc(String.valueOf(latitude)));
-                params.add("longitude=" + enc(String.valueOf(longitude)));
-                params.add("radius=" + enc(String.valueOf(radiusNm)));
+                params.add("locationLatitude=" + enc(String.valueOf(latitude)));
+                params.add("locationLongitude=" + enc(String.valueOf(longitude)));
+                params.add("locationRadius=" + enc(String.valueOf(radiusNm)));
             }
             params.add("classification=DOM");
             params.add("pageSize=" + enc(pageSize));
