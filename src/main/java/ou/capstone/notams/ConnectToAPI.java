@@ -184,7 +184,7 @@ public final class ConnectToAPI {
                 params.add("longitude=" + enc(String.valueOf(longitude)));
                 params.add("radius=" + enc(String.valueOf(radiusNm)));
             }
-
+            params.add("classification=DOM");
             params.add("pageSize=" + enc(pageSize));
             params.add("pageNum=" + enc(pageNum));
             params.add("sortBy=" + enc(sortBy));
