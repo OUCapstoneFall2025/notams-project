@@ -7,4 +7,7 @@ import java.util.List;
 public interface NotamPrioritizer {
     /** Return a new list of NOTAMs sorted by descending priority score. */
     List<Notam> prioritize(List<Notam> notams);
+    
+    double score(Notam notam);
 }
+
