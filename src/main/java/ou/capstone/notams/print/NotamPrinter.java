@@ -11,15 +11,10 @@ import java.util.Locale;
 
 
 /**
- * Renders NOTAMs as a copy-friendly console table.
- * <p>
- * Design choices:
- * <ul>
- *   <li>Uses {@code System.out} so output has no log prefixes and ANSI colors render cleanly.</li>
- *   <li>Provides {@link #render(List)} for tests/logging and {@link #print(List)} for the CLI.</li>
- *   <li>Coloring is derived from prioritizer <b>rank bands</b> (top % red, next % yellow, rest blue).</li>
- *   <li>Time columns shown as UTC only, local only, or both via {@link TimeMode}.</li>
- * </ul>
+ * Console printer for NOTAMs.
+ *
+ * Provides both {@link #print(List)} for CLI stdout and {@link #render(List)}
+ * for tests/logging.
  */
 
 public class NotamPrinter {
@@ -30,10 +25,6 @@ public class NotamPrinter {
     private final TimeMode timeMode;
     private final AnsiOutputHelper ansi;
 
-
-    // Rank band percentages
-    private final double redTopPercent;
-    private final double yellowNextPercent;
 
     // Column widths
     private static final int LOCATION_COL_WIDTH       = 4;
@@ -49,28 +40,29 @@ public class NotamPrinter {
     private static final DateTimeFormatter LOCAL_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z");
 
-    /** Default bands: top 10% red, next 20% yellow, rest blue. */
+    // Fixed score thresholds for coloring (based on SimplePrioritizer's scale ~0–165)
+    private static final double RED_MIN_SCORE    = 100.0; // high priority
+    private static final double YELLOW_MIN_SCORE = 50.0;  // medium priority
+    // 0–49.999... = low priority
+    
+    /** Default: both UTC + local time, ANSI colors enabled. */
     public NotamPrinter(final ZoneId localZoneId) {
-        this(localZoneId, TimeMode.BOTH, true, 0.10, 0.20);
+        this(localZoneId, TimeMode.BOTH, true);
     }
     
     public NotamPrinter(final ZoneId localZoneId,
                         final boolean includeLocalTimes,
                         final boolean enableAnsiColors) {
-    	 this(localZoneId, includeLocalTimes ? TimeMode.BOTH : TimeMode.UTC_ONLY, enableAnsiColors, 0.10, 0.20);
+    	 this(localZoneId, includeLocalTimes ? TimeMode.BOTH : TimeMode.UTC_ONLY, enableAnsiColors);
     }
 
-    /** Customizable band percentages. */
+    
     public NotamPrinter(final ZoneId localZoneId,
                         final TimeMode timeMode,
-                        final boolean enableAnsiColors,
-                        final double redTopPercent,
-                        final double yellowNextPercent) {
+                        final boolean enableAnsiColors) {
     	   this.localZoneId = localZoneId;
            this.timeMode = timeMode;
            this.ansi = new AnsiOutputHelper(enableAnsiColors);
-           this.redTopPercent = clampPercent(redTopPercent);
-           this.yellowNextPercent = clampPercent(yellowNextPercent);
        }
 
     /**
@@ -97,31 +89,21 @@ public class NotamPrinter {
 
         final List<NotamView> sorted = new ArrayList<>(notams);
 
-        final Comparator<NotamView> byScoreDesc =
-                Comparator.comparing(NotamView::score, Comparator.nullsLast(Comparator.naturalOrder()))
-                          .reversed();
-
         sorted.sort(
-                Comparator.comparing(NotamView::location, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-                        .thenComparing(byScoreDesc)
-                        .thenComparing(NotamView::startTimeUtc, Comparator.nullsLast(Comparator.naturalOrder()))
-        );
-
-        // Compute rank cutoffs from percentages
-        final int total = sorted.size();
-        final int colorRedIndexCutoff = Math.max(0, Math.min(total, (int) Math.ceil(total * redTopPercent)));
-        final int colorYellowIndexCutoff = Math.max(
-                colorRedIndexCutoff,
-                Math.min(total, colorRedIndexCutoff + (int) Math.ceil(total * yellowNextPercent))
+                Comparator.comparing(NotamView::score,
+                                     Comparator.nullsLast(Comparator.reverseOrder()))
+                          .thenComparing(NotamView::location,
+                                         Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                          .thenComparing(NotamView::startTimeUtc,
+                                         Comparator.nullsLast(Comparator.naturalOrder()))
         );
 
         final StringBuilder sb = new StringBuilder();
         sb.append(buildHeader()).append('\n');
         sb.append(buildSeparator()).append('\n');
 
-        for (int i = 0; i < sorted.size(); i++) {
-            final NotamView item = sorted.get(i);
-            sb.append(formatRowRankColored(item, i, colorRedIndexCutoff, colorYellowIndexCutoff)).append('\n');
+        for (final NotamView item : sorted) {
+            sb.append(formatRowScoreColored(item)).append('\n');
         }
 
         return sb.toString();
@@ -150,9 +132,13 @@ public class NotamPrinter {
                 "Condition");
 
         if (timeMode == TimeMode.BOTH) {
-            final String locals = startHeaderLocal + "  " + endHeaderLocal;
-            header += "\n" + " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + CLASSIFICATION_COL_WIDTH + 6)
-                    + ansi.dim(locals);
+        	  final String locals = startHeaderLocal + "  " + endHeaderLocal;
+              header += "\n"
+                      + " ".repeat(LOCATION_COL_WIDTH
+                                 + NUMBER_COL_WIDTH
+                                 + CLASSIFICATION_COL_WIDTH
+                                 + 6)
+                      + ansi.dim(locals);
         }
         return header;
     }
@@ -169,12 +155,8 @@ public class NotamPrinter {
         return "-".repeat(total);
     }
 
-    private String formatRowRankColored(final NotamView n,
-                                        final int index,
-                                        final int colorRedIndexCutoff,
-                                        final int colorYellowIndexCutoff) {
-
-
+ // Row formatting with score-based coloring
+    private String formatRowScoreColored(final NotamView n) {
         final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
         final String number         = pad(clamp(n.notamNumber(), NUMBER_COL_WIDTH), NUMBER_COL_WIDTH);
         final String classification = pad(clamp(n.classification() == null ? "-" : n.classification(),
@@ -186,15 +168,25 @@ public class NotamPrinter {
         final String startLocal = pad(formatLocal(n.startTimeUtc()), START_TIMESTAMP_COL_WIDTH);
         final String endLocal   = pad(formatLocal(n.endTimeUtc()),   END_TIMESTAMP_COL_WIDTH);
 
-        final String score = pad(n.score() == null ? "-" : String.format(Locale.ROOT, "%.2f", n.score()),
-                                 SCORE_COL_WIDTH);
-
+        final Double scoreValue = n.score();
+        final String scoreText  = pad(
+                scoreValue == null ? "-" : String.format(Locale.ROOT, "%.1f", scoreValue),
+                SCORE_COL_WIDTH
+        );
         final String rawCondition = clamp(n.conditionText(), CONDITION_COL_WIDTH);
-        final String coloredCondition =
-                (index < colorRedIndexCutoff)    ? ansi.colorRed(rawCondition)
-              : (index < colorYellowIndexCutoff) ? ansi.colorYellow(rawCondition)
-                                                 : ansi.colorBlue(rawCondition);
-
+        final String coloredCondition ;
+        if (scoreValue == null) {
+            // No score – leave uncolored 
+            coloredCondition = rawCondition;
+        } else if (scoreValue >= RED_MIN_SCORE) {
+            coloredCondition = ansi.colorRed(rawCondition);    // high priority
+        } else if (scoreValue >= YELLOW_MIN_SCORE) {
+            coloredCondition = ansi.colorYellow(rawCondition); // medium priority
+        } else if (scoreValue >= 0.0) {
+            coloredCondition = ansi.colorBlue(rawCondition);
+        } else {
+            coloredCondition = rawCondition;
+        }
         final String timeCols = switch (timeMode) {
         case UTC_ONLY   -> startUtc + "  " + endUtc;
         case LOCAL_ONLY -> startLocal + "  " + endLocal;
@@ -203,7 +195,7 @@ public class NotamPrinter {
     };
 
         String line = String.format("%s  %s  %s  %s  %s  %s",
-                location, number, classification, timeCols, score, coloredCondition);
+                location, number, classification, timeCols, scoreText, coloredCondition);
 
         if (timeMode == TimeMode.BOTH) {
             final String localLine = " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + CLASSIFICATION_COL_WIDTH + 6)
@@ -216,28 +208,36 @@ public class NotamPrinter {
 
     // Tiny helpers 
     private static String pad(final String value, final int width) {
-        final String v = value == null ? "-" : value;
-        return String.format("%-" + width + "s", v);
+        final String v = (value == null) ? "-" : value;
+        if (v.length() >= width) {
+            return v;
+        }
+        final StringBuilder sb = new StringBuilder(v);
+        while (sb.length() < width) {
+            sb.append(' ');
+        }
+        return sb.toString();
     }
 
     private static String clamp(final String text, final int maxLength) {
-        if (text == null) return "-";
+        if (text == null) {
+            return "-";
+        }
         final String normalized = text.trim().replaceAll("\\s+", " ");
-        if (normalized.length() <= maxLength) return normalized;
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
         return normalized.substring(0, Math.max(0, maxLength - 1)) + "…";
     }
-
+   
     private static String formatUtc(final Instant instant) {
         return instant == null ? "-" : UTC_FORMATTER.format(instant);
     }
 
     private String formatLocal(final Instant instant) {
-        return instant == null ? "-" : LOCAL_FORMATTER.format(instant.atZone(localZoneId));
-    }
-
-    private static double clampPercent(final double p) {
-        if (p < 0.0) return 0.0;
-        if (p > 1.0) return 1.0;
-        return p;
+        if (instant == null) {
+            return "-";
+        }
+        return LOCAL_FORMATTER.format(instant.atZone(localZoneId));
     }
 }
