@@ -9,6 +9,7 @@ import ou.capstone.notams.print.NotamView;
 import ou.capstone.notams.print.NotamPrinter;
 import ou.capstone.notams.print.NotamPrinter.TimeMode;
 import ou.capstone.notams.print.NotamColorPrinter;
+import ou.capstone.notams.print.OutputConfig;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,11 +70,35 @@ public final class App {
                 .desc( "Destination airport code" ).get();
         final Option helpOption = Option.builder( "h" ).longOpt( "help" )
                 .desc( "Display help" ).get();
+        final Option outputModeOption = Option.builder( "o" )
+                .longOpt( "output-mode" ).hasArg()
+                .desc( "Output mode: 'full' or 'truncated' (default: full)" ).get();
+        final Option truncateLengthOption = Option.builder( "t" )
+                .longOpt( "truncate-length" ).hasArg()
+                .desc( "Maximum characters for truncated output (default: 100)" ).get();
+        final Option delimitersOption = Option.builder()
+                .longOpt( "delimiters" )
+                .desc( "Show delimiters between NOTAMs (default: enabled)" ).get();
+        final Option noDelimitersOption = Option.builder()
+                .longOpt( "no-delimiters" )
+                .desc( "Hide delimiters between NOTAMs" ).get();
+        final Option separateMetadataOption = Option.builder()
+                .longOpt( "separate-metadata" )
+                .desc( "Separate metadata (score, location, etc.) from NOTAM text" ).get();
+        final Option noSeparateMetadataOption = Option.builder()
+                .longOpt( "no-separate-metadata" )
+                .desc( "Do not separate metadata from NOTAM text (default)" ).get();
 
         final Options options = new Options();
         options.addOption( departureAirportOption );
         options.addOption( destinationAirportOption );
         options.addOption( helpOption );
+        options.addOption( outputModeOption );
+        options.addOption( truncateLengthOption );
+        options.addOption( delimitersOption );
+        options.addOption( noDelimitersOption );
+        options.addOption( separateMetadataOption );
+        options.addOption( noSeparateMetadataOption );
 
         final CommandLineParser cliParser = new DefaultParser();
         final CommandLine line;
@@ -159,8 +184,16 @@ public final class App {
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
 
-            // Step 6: Display results
-            displayResults(prioritizedNotams, departureCode, destinationCode);
+            // Step 6: Parse output configuration
+            final OutputConfig outputConfig = parseOutputConfig(line, outputModeOption, truncateLengthOption, 
+                    delimitersOption, noDelimitersOption, separateMetadataOption, noSeparateMetadataOption);
+            
+            if (logger.isDebugEnabled()) {
+                logger.debug("Output configuration: {}", outputConfig);
+            }
+
+            // Step 7: Display results
+            displayResults(prioritizedNotams, departureCode, destinationCode, outputConfig);
 
             logger.info("NOTAM Prioritization System completed successfully");
 
@@ -183,16 +216,77 @@ public final class App {
     }
 
     /**
+     * Parses output configuration from command line options.
+     *
+     * @param line command line parsed options
+     * @param outputModeOption output mode option
+     * @param truncateLengthOption truncate length option
+     * @param delimitersOption delimiters option
+     * @param noDelimitersOption no delimiters option
+     * @param separateMetadataOption separate metadata option
+     * @param noSeparateMetadataOption no separate metadata option
+     * @return OutputConfig based on parsed options
+     */
+    private static OutputConfig parseOutputConfig(final CommandLine line,
+                                                  final Option outputModeOption,
+                                                  final Option truncateLengthOption,
+                                                  final Option delimitersOption,
+                                                  final Option noDelimitersOption,
+                                                  final Option separateMetadataOption,
+                                                  final Option noSeparateMetadataOption) {
+        OutputConfig.OutputMode mode = OutputConfig.OutputMode.FULL;
+        if (line.hasOption(outputModeOption)) {
+            final String modeValue = line.getOptionValue(outputModeOption);
+            if ("truncated".equalsIgnoreCase(modeValue)) {
+                mode = OutputConfig.OutputMode.TRUNCATED;
+            } else if (!"full".equalsIgnoreCase(modeValue)) {
+                logger.warn("Unknown output mode '{}', using 'full'", modeValue);
+            }
+        }
+
+        int truncateLength = 100;
+        if (line.hasOption(truncateLengthOption)) {
+            try {
+                truncateLength = Integer.parseInt(line.getOptionValue(truncateLengthOption));
+                if (truncateLength < 1) {
+                    logger.warn("Invalid truncate length {}, using default 100", truncateLength);
+                    truncateLength = 100;
+                }
+            } catch (final NumberFormatException e) {
+                logger.warn("Invalid truncate length value, using default 100", e);
+            }
+        }
+
+        boolean showDelimiters = true;
+        if (line.hasOption(noDelimitersOption)) {
+            showDelimiters = false;
+        } else if (line.hasOption(delimitersOption)) {
+            showDelimiters = true;
+        }
+
+        boolean separateMetadata = false;
+        if (line.hasOption(separateMetadataOption)) {
+            separateMetadata = true;
+        } else if (line.hasOption(noSeparateMetadataOption)) {
+            separateMetadata = false;
+        }
+
+        return new OutputConfig(mode, truncateLength, showDelimiters, separateMetadata);
+    }
+
+    /**
      * Displays prioritized NOTAMs to the user.
      * Shows NOTAMs sorted by priority (most important first).
      *
      * @param prioritizedNotams list of NOTAMs already sorted by priority
      * @param departureCode departure airport code
      * @param destinationCode destination airport code
+     * @param outputConfig configuration for output formatting
      */
     private static void displayResults(final List<Notam> prioritizedNotams,
                                        final String departureCode,
-                                       final String destinationCode) {
+                                       final String destinationCode,
+                                       final OutputConfig outputConfig) {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("NOTAMs for Flight: " + departureCode + " to " + destinationCode);
         System.out.println("Sorted by Priority (Most Important First)");
@@ -213,7 +307,7 @@ public final class App {
                                 issued,                 // start (best-effort)
                                 issued,                 // end (best-effort)
                                 n.getText(),            // condition text
-                                null                    // score (SimplePrioritizer doesn’t mention one)
+                                null                    // score (SimplePrioritizer doesn't mention one)
                         );
                     })
                     .collect(Collectors.toList());
@@ -221,22 +315,8 @@ public final class App {
 
         final NotamPrinter printer = new NotamColorPrinter(ZoneId.systemDefault(), TimeMode.BOTH);
 
-        printer.print(views);
+        printer.print(views, outputConfig);
         System.out.println("\n" + "=".repeat(80) + "\n");
-    }
-
-    /**
-     * Truncates text to specified length.
-     *
-     * @param text text to truncate
-     * @param maxLength maximum length
-     * @return truncated text
-     */
-    private static String truncate(final String text, final int maxLength) {
-        if (text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength - 3) + "...";
     }
 
     /**

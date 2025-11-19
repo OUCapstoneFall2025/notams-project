@@ -84,6 +84,16 @@ public class NotamPrinter {
     }
 
     /**
+     * Prints the formatted NOTAM table to stdout for CLI usage with output configuration.
+     *
+     * @param notams list of NOTAM view models to display; if null/empty, prints an empty-state message.
+     * @param config output configuration for formatting options
+     */
+    public void print(final List<NotamView> notams, final OutputConfig config) {
+    	System.out.println(render(notams, config));
+    }
+
+    /**
      * Renders the formatted NOTAM table as a single String.
      * <p>Intended for unit tests and logging—use {@link #print(List)} for interactive CLI output.</p>
      *
@@ -91,6 +101,18 @@ public class NotamPrinter {
      * @return the complete table as a String (including header and rows).
      */
     public String render(final List<NotamView> notams) {
+        return render(notams, OutputConfig.defaults());
+    }
+
+    /**
+     * Renders the formatted NOTAM table as a single String with output configuration.
+     * <p>Intended for unit tests and logging—use {@link #print(List, OutputConfig)} for interactive CLI output.</p>
+     *
+     * @param notams list of NOTAM view models; if null/empty, a friendly empty-state string is returned.
+     * @param config output configuration for formatting options
+     * @return the complete table as a String (including header and rows).
+     */
+    public String render(final List<NotamView> notams, final OutputConfig config) {
         if (notams == null || notams.isEmpty()) {
             return "No NOTAMs to display.";
         }
@@ -116,12 +138,43 @@ public class NotamPrinter {
         );
 
         final StringBuilder sb = new StringBuilder();
-        sb.append(buildHeader()).append('\n');
-        sb.append(buildSeparator()).append('\n');
+        
+        if (config.separateMetadata()) {
+            // Separated metadata mode: show metadata section, then text section
+            sb.append(buildMetadataHeader()).append('\n');
+            sb.append(buildMetadataSeparator()).append('\n');
+            
+            for (int i = 0; i < sorted.size(); i++) {
+                final NotamView item = sorted.get(i);
+                if (config.showDelimiters() && i > 0) {
+                    sb.append(buildDelimiter()).append('\n');
+                }
+                sb.append(formatMetadataRow(item, i, colorRedIndexCutoff, colorYellowIndexCutoff, config)).append('\n');
+            }
+            
+            sb.append('\n');
+            sb.append(buildTextHeader()).append('\n');
+            sb.append(buildTextSeparator()).append('\n');
+            
+            for (int i = 0; i < sorted.size(); i++) {
+                final NotamView item = sorted.get(i);
+                if (config.showDelimiters() && i > 0) {
+                    sb.append(buildDelimiter()).append('\n');
+                }
+                sb.append(formatTextRow(item, i, colorRedIndexCutoff, colorYellowIndexCutoff, config)).append('\n');
+            }
+        } else {
+            // Standard table mode
+            sb.append(buildHeader()).append('\n');
+            sb.append(buildSeparator()).append('\n');
 
-        for (int i = 0; i < sorted.size(); i++) {
-            final NotamView item = sorted.get(i);
-            sb.append(formatRowRankColored(item, i, colorRedIndexCutoff, colorYellowIndexCutoff)).append('\n');
+            for (int i = 0; i < sorted.size(); i++) {
+                final NotamView item = sorted.get(i);
+                if (config.showDelimiters() && i > 0) {
+                    sb.append(buildDelimiter()).append('\n');
+                }
+                sb.append(formatRowRankColored(item, i, colorRedIndexCutoff, colorYellowIndexCutoff, config)).append('\n');
+            }
         }
 
         return sb.toString();
@@ -172,7 +225,8 @@ public class NotamPrinter {
     private String formatRowRankColored(final NotamView n,
                                         final int index,
                                         final int colorRedIndexCutoff,
-                                        final int colorYellowIndexCutoff) {
+                                        final int colorYellowIndexCutoff,
+                                        final OutputConfig config) {
 
 
         final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
@@ -189,7 +243,7 @@ public class NotamPrinter {
         final String score = pad(n.score() == null ? "-" : String.format(Locale.ROOT, "%.2f", n.score()),
                                  SCORE_COL_WIDTH);
 
-        final String rawCondition = clamp(n.conditionText(), CONDITION_COL_WIDTH);
+        final String rawCondition = applyTruncation(clamp(n.conditionText(), CONDITION_COL_WIDTH), config);
         final String coloredCondition =
                 (index < colorRedIndexCutoff)    ? ansi.colorRed(rawCondition)
               : (index < colorYellowIndexCutoff) ? ansi.colorYellow(rawCondition)
@@ -214,6 +268,111 @@ public class NotamPrinter {
         return line;
     }
 
+    private String buildMetadataHeader() {
+        final String startHeaderUtc   = pad("Start(UTC)",  START_TIMESTAMP_COL_WIDTH);
+        final String endHeaderUtc     = pad("End(UTC)",    END_TIMESTAMP_COL_WIDTH);
+        final String startHeaderLocal = pad("Start(Local)",START_TIMESTAMP_COL_WIDTH);
+        final String endHeaderLocal   = pad("End(Local)",  END_TIMESTAMP_COL_WIDTH);
+
+        final String timeHeader = switch (timeMode) {
+        case UTC_ONLY   -> startHeaderUtc + "  " + endHeaderUtc;
+        case LOCAL_ONLY -> startHeaderLocal + "  " + endHeaderLocal;
+        case BOTH       -> startHeaderUtc + "  " + endHeaderUtc;
+        default         -> startHeaderUtc + "  " + endHeaderUtc;
+        };
+
+        String header = String.format(Locale.ROOT, "%s  %s  %s  %s  %s",
+                pad("Loc", LOCATION_COL_WIDTH),
+                pad("Number", NUMBER_COL_WIDTH),
+                pad("Class", CLASSIFICATION_COL_WIDTH),
+                timeHeader,
+                pad("Score", SCORE_COL_WIDTH));
+
+        if (timeMode == TimeMode.BOTH) {
+            final String locals = startHeaderLocal + "  " + endHeaderLocal;
+            header += "\n" + " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + CLASSIFICATION_COL_WIDTH + 6)
+                    + ansi.dim(locals);
+        }
+        return "Metadata:\n" + header;
+    }
+
+    private String buildMetadataSeparator() {
+        final int total =
+                LOCATION_COL_WIDTH + 2
+              + NUMBER_COL_WIDTH + 2
+              + CLASSIFICATION_COL_WIDTH + 2
+              + START_TIMESTAMP_COL_WIDTH + 2
+              + END_TIMESTAMP_COL_WIDTH + 2
+              + SCORE_COL_WIDTH + 2;
+        return "-".repeat(total);
+    }
+
+    private String buildTextHeader() {
+        return "NOTAM Text:";
+    }
+
+    private String buildTextSeparator() {
+        return "-".repeat(80);
+    }
+
+    private String formatMetadataRow(final NotamView n,
+                                     final int index,
+                                     final int colorRedIndexCutoff,
+                                     final int colorYellowIndexCutoff,
+                                     final OutputConfig config) {
+        final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
+        final String number         = pad(clamp(n.notamNumber(), NUMBER_COL_WIDTH), NUMBER_COL_WIDTH);
+        final String classification = pad(clamp(n.classification() == null ? "-" : n.classification(),
+                                                CLASSIFICATION_COL_WIDTH),
+                                          CLASSIFICATION_COL_WIDTH);
+
+        final String startUtc   = pad(formatUtc(n.startTimeUtc()),   START_TIMESTAMP_COL_WIDTH);
+        final String endUtc     = pad(formatUtc(n.endTimeUtc()),     END_TIMESTAMP_COL_WIDTH);
+        final String startLocal = pad(formatLocal(n.startTimeUtc()), START_TIMESTAMP_COL_WIDTH);
+        final String endLocal   = pad(formatLocal(n.endTimeUtc()),   END_TIMESTAMP_COL_WIDTH);
+
+        final String score = pad(n.score() == null ? "-" : String.format(Locale.ROOT, "%.2f", n.score()),
+                                 SCORE_COL_WIDTH);
+
+        final String timeCols = switch (timeMode) {
+        case UTC_ONLY   -> startUtc + "  " + endUtc;
+        case LOCAL_ONLY -> startLocal + "  " + endLocal;
+        case BOTH       -> startUtc + "  " + endUtc;
+        default         -> startUtc + "  " + endUtc;
+        };
+
+        String line = String.format("%s  %s  %s  %s  %s",
+                location, number, classification, timeCols, score);
+
+        if (timeMode == TimeMode.BOTH) {
+            final String localLine = " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + CLASSIFICATION_COL_WIDTH + 6)
+                    + ansi.dim(startLocal + "  " + endLocal);
+            line += "\n" + localLine;
+        }
+
+        return line;
+    }
+
+    private String formatTextRow(final NotamView n,
+                                  final int index,
+                                  final int colorRedIndexCutoff,
+                                  final int colorYellowIndexCutoff,
+                                  final OutputConfig config) {
+        final String rawText = n.conditionText() == null ? "-" : n.conditionText();
+        final String processedText = applyTruncation(rawText, config);
+        
+        final String coloredText =
+                (index < colorRedIndexCutoff)    ? ansi.colorRed(processedText)
+              : (index < colorYellowIndexCutoff) ? ansi.colorYellow(processedText)
+                                                 : ansi.colorBlue(processedText);
+
+        return coloredText;
+    }
+
+    private String buildDelimiter() {
+        return "-".repeat(80);
+    }
+
     // Tiny helpers 
     private static String pad(final String value, final int width) {
         final String v = value == null ? "-" : value;
@@ -225,6 +384,19 @@ public class NotamPrinter {
         final String normalized = text.trim().replaceAll("\\s+", " ");
         if (normalized.length() <= maxLength) return normalized;
         return normalized.substring(0, Math.max(0, maxLength - 1)) + "…";
+    }
+
+    private String applyTruncation(final String text, final OutputConfig config) {
+        if (text == null || text.equals("-")) return text;
+        if (config.outputMode() == OutputConfig.OutputMode.FULL) {
+            return text;
+        }
+        // Truncated mode
+        final int maxLength = config.truncateLength();
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength - 3) + "...";
     }
 
     private static String formatUtc(final Instant instant) {
