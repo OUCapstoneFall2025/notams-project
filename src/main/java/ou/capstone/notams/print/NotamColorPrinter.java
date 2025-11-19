@@ -6,10 +6,10 @@ import java.time.ZoneId;
 
 public class NotamColorPrinter extends NotamPrinter {
     public NotamColorPrinter(final ZoneId zoneId, final NotamPrinter.TimeMode timeMode) {
-        super(zoneId, timeMode, true, 0.10, 0.20);
+        super(zoneId, timeMode, true);
     }
 
     public NotamColorPrinter(final ZoneId zoneId) {
-        super(zoneId, NotamPrinter.TimeMode.BOTH, true, 0.10, 0.20);
+        super(zoneId, NotamPrinter.TimeMode.BOTH, true);
     }
 }

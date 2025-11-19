@@ -3,7 +3,6 @@ package ou.capstone.notams;
 import ou.capstone.notams.api.NotamFetcher;
 import ou.capstone.notams.validation.AirportValidator;
 import ou.capstone.notams.validation.ValidationResult;
-import ou.capstone.notams.prioritize.NotamPrioritizer;
 import ou.capstone.notams.prioritize.SimplePrioritizer;
 import ou.capstone.notams.print.NotamView;
 import ou.capstone.notams.print.NotamPrinter;
@@ -154,13 +153,13 @@ public final class App {
                     notams.size(), uniqueNotams.size());
          
             // Step 5: Prioritize NOTAMs (delegated to SimplePrioritizer)
-            final NotamPrioritizer prioritizer = new SimplePrioritizer();
+            final SimplePrioritizer prioritizer = new SimplePrioritizer();
             final List<Notam> prioritizedNotams = prioritizer.prioritize(uniqueNotams);
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
 
             // Step 6: Display results
-            displayResults(prioritizedNotams, departureCode, destinationCode);
+            displayResults(prioritizedNotams, departureCode, destinationCode, prioritizer);
 
             logger.info("NOTAM Prioritization System completed successfully");
 
@@ -192,7 +191,8 @@ public final class App {
      */
     private static void displayResults(final List<Notam> prioritizedNotams,
                                        final String departureCode,
-                                       final String destinationCode) {
+                                       final String destinationCode,
+                                       final SimplePrioritizer prioritizer) {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("NOTAMs for Flight: " + departureCode + " to " + destinationCode);
         System.out.println("Sorted by Priority (Most Important First)");
@@ -206,6 +206,7 @@ public final class App {
                 : prioritizedNotams.stream()
                     .map(n -> {
                         final Instant issued = (n.getIssued() != null) ? n.getIssued().toInstant() : null;
+                        final double score = prioritizer.score(n);
                         return new NotamView(
                                 n.getNumber(),          // notamNumber
                                 n.getLocation(),        // location (e.g., KOKC)
@@ -213,7 +214,7 @@ public final class App {
                                 issued,                 // start (best-effort)
                                 issued,                 // end (best-effort)
                                 n.getText(),            // condition text
-                                null                    // score (SimplePrioritizer doesn’t mention one)
+                                score                    // score (used by NotamPrinter)
                         );
                     })
                     .collect(Collectors.toList());
