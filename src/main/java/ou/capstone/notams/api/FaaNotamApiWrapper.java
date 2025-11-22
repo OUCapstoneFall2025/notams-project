@@ -1,4 +1,4 @@
-package ou.capstone.notams;
+package ou.capstone.notams.api;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,9 +23,10 @@ import java.util.List;
  *
  * To run with verbose logging use -DConnectToApi.VerboseLogging=true
  */
-public final class ConnectToAPI {
+public final class FaaNotamApiWrapper
+{
 
-    private static final Logger logger = LoggerFactory.getLogger(ConnectToAPI.class);
+    private static final Logger logger = LoggerFactory.getLogger(FaaNotamApiWrapper.class);
 
     private static final String FAA_DOMAIN = "external-api.faa.gov";
     private static final String NOTAM_API_PATH = "/notamapi/v1/notams";
@@ -295,7 +296,7 @@ public final class ConnectToAPI {
     private static String loadMockJson() throws Exception {
         logger.info("Loading mock NOTAM data from resources");
 
-        try (final InputStream inputStream = ConnectToAPI.class.getClassLoader()
+        try (final InputStream inputStream = FaaNotamApiWrapper.class.getClassLoader()
                 .getResourceAsStream("mock-faa-response.json")) {
 
             if (inputStream == null) {
