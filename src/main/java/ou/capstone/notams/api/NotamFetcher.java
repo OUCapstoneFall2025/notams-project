@@ -180,7 +180,6 @@ public class NotamFetcher {
 
         final long t0 = System.currentTimeMillis();
 
-        // Use ConnectToAPI utility class for reusable HTTP client code
         final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder(latitude, longitude, radiusNm)
                 .pageSize("200");
 
@@ -195,6 +194,26 @@ public class NotamFetcher {
 
         return waypointNotams;
     }
+
+	public List<Notam> fetchForAirport( final String airportCode )
+			throws Exception
+	{
+		final long t0 = System.currentTimeMillis();
+
+		final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder(
+				airportCode );
+		final List<String> response = FaaNotamApiWrapper.fetchAllPages( queryParams );
+
+        List<Notam> notams = new ArrayList<>();
+        response.forEach( p -> notams.addAll( parser.parseGeoJson( p ) ) );
+
+		final long t1 = System.currentTimeMillis();
+		if( logger.isDebugEnabled() ) {
+			logger.debug( "Single HTTP fetch took {} ms ({} NOTAMs)", (t1 - t0),
+					notams.size() );
+		}
+		return notams;
+	}
 
     /**
      * Retrieves the latitude and longitude coordinates for a given airport code.
