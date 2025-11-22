@@ -7,8 +7,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ou.capstone.notams.ConnectToAPI;
-import ou.capstone.notams.ConnectToAPI.QueryParamsBuilder;
+import ou.capstone.notams.api.FaaNotamApiWrapper.QueryParamsBuilder;
 import ou.capstone.notams.Notam;
 import ou.capstone.notams.route.Coordinate;
 import ou.capstone.notams.route.RouteCalculator;
@@ -108,7 +107,7 @@ public class NotamFetcher {
             try {
                 final QueryParamsBuilder queryParams =
                     new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize("200");
-                final String rawJson = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
+                final String rawJson = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
                 waypointNotams = parser.parseGeoJson(rawJson);
                 notams.addAll(waypointNotams);
             } catch (final Exception e) {
@@ -182,10 +181,10 @@ public class NotamFetcher {
         final long t0 = System.currentTimeMillis();
 
         // Use ConnectToAPI utility class for reusable HTTP client code
-        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder(latitude, longitude, radiusNm)
+        final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder(latitude, longitude, radiusNm)
                 .pageSize("200");
 
-        final String response = ConnectToAPI.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
+        final String response = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
         List<Notam> waypointNotams = parser.parseGeoJson(response);
 
         final long t1 = System.currentTimeMillis();
