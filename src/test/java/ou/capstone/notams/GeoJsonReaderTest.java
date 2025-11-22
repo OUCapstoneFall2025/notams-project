@@ -16,6 +16,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import ou.capstone.notams.api.FaaNotamApiWrapper;
+
 /**
  * Tests for GeoJsonReader functionality.
  * Includes both unit tests with mock data and integration tests with live API.
@@ -32,13 +34,15 @@ final class GeoJsonReaderTest {
         final String mockJson = loadMockJsonFromResources();
         
         // Mock ConnectToAPI.fetchRawJson() to return mock JSON
-        try (MockedStatic<ConnectToAPI> mockedConnectToAPI = Mockito.mockStatic(ConnectToAPI.class)) {
-            mockedConnectToAPI.when(() -> ConnectToAPI.fetchRawJson(any(ConnectToAPI.QueryParamsBuilder.class)))
+        try (MockedStatic<FaaNotamApiWrapper> mockedConnectToAPI = Mockito.mockStatic(
+				FaaNotamApiWrapper.class)) {
+            mockedConnectToAPI.when(() -> FaaNotamApiWrapper.fetchRawJson(any(
+							FaaNotamApiWrapper.QueryParamsBuilder.class)))
                     .thenReturn(mockJson);
             
             // Call the mocked method and parse
-            final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder("KOKC");
-            final String json = ConnectToAPI.fetchRawJson(queryParams);
+            final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder("KOKC");
+            final String json = FaaNotamApiWrapper.fetchRawJson(queryParams);
             final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(json);
             
             assertNotNull(notams, "Parsed list should not be null");
@@ -46,7 +50,8 @@ final class GeoJsonReaderTest {
             logger.info("Successfully parsed {} mock NOTAMs", notams.size());
             
             // Verify the mock was called
-            mockedConnectToAPI.verify(() -> ConnectToAPI.fetchRawJson(any(ConnectToAPI.QueryParamsBuilder.class)), times(1));
+            mockedConnectToAPI.verify(() -> FaaNotamApiWrapper.fetchRawJson(any(
+					FaaNotamApiWrapper.QueryParamsBuilder.class)), times(1));
         }
     }
 
@@ -57,8 +62,8 @@ final class GeoJsonReaderTest {
         logger.info("Fetching live NOTAMs via ConnectToAPI");
         // This test requires live API access and should be run with integrationTest task
         // This test calls ConnectToAPI directly without mocking
-        final ConnectToAPI.QueryParamsBuilder queryParams = new ConnectToAPI.QueryParamsBuilder("KOKC");
-        final String json = ConnectToAPI.fetchRawJson(queryParams);
+        final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder("KOKC");
+        final String json = FaaNotamApiWrapper.fetchRawJson(queryParams);
         final List<Notam> notams = new GeoJsonReader().parseNotamsFromGeoJson(json);
         assertNotNull(notams, "Parsed list should not be null");
     }

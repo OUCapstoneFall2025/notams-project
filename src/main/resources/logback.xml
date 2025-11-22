@@ -36,7 +36,7 @@
     </appender>
 
     <!-- Logger for API-related classes -->
-    <logger name="ou.capstone.notams.ConnectToAPI" level="DEBUG" additivity="false">
+    <logger name="ou.capstone.notams.api.FaaNotamApiWrapper" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="API_FILE" />
     </logger>
