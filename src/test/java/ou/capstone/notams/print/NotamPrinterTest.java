@@ -30,7 +30,8 @@ final class NotamPrinterTest {
 
     @Test
     void printsEmptyState() {
-        final NotamPrinter printer = new NotamPrinter(ZoneId.of("UTC"), true, false);
+        // Base printer, no color, default BOTH time mode
+        final NotamPrinter printer = new NotamPrinter(ZoneId.of("UTC"));
         printer.print(List.of());
         final String out = buffer.toString();
 
@@ -40,7 +41,9 @@ final class NotamPrinterTest {
 
     @Test
     void printsHeaderAndRows_withLocalTimesDisabled() {
-        final NotamPrinter printer = new NotamPrinter(ZoneId.of("UTC"), false, false);
+        // Explicitly use UTC-only mode (no local times)
+        final NotamPrinter printer =
+                new NotamPrinter(ZoneId.of("UTC"), NotamPrinter.TimeMode.UTC_ONLY);
 
         final List<NotamView> views = List.of(
                 new NotamView(
@@ -74,30 +77,31 @@ final class NotamPrinterTest {
         assertTrue(out.contains("2025-10-26 02:14Z"), "Should format UTC start time");
 
         // Ensure local times line is NOT printed
-        assertTrue(!out.contains("Start(Local)"), "Local header should be absent when disabled");
+        assertTrue(!out.contains("Start(Local)"),
+                "Local header should be absent when local times are disabled");
     }
 
     @Test
     void printsHeaderAndRows_withLocalTimesEnabled_andAnsiColorsEnabled() {
-        // Using UTC zone 
-        final NotamPrinter printer = new NotamPrinter(ZoneId.of("UTC"), true, true);
+        // Use the color printer, which extends NotamPrinter and adds ANSI colors
+        final NotamPrinter printer = new NotamColorPrinter(ZoneId.of("UTC"), NotamPrinter.TimeMode.BOTH);
 
         final List<NotamView> views = List.of(
                 new NotamView(
                         "01/111", "KJFK", "Aerodrome",
                         Instant.parse("2025-01-02T10:00:00Z"),
                         Instant.parse("2025-02-02T10:00:00Z"),
-                        "RUNWAY CLOSED RWY 13L/31R", // expect elevated severity (red)
-                        3.00
+                        "RUNWAY CLOSED RWY 13L/31R", // high-priority condition
+                        120.0                         // high score → red in color printer
                 )
         );
 
         printer.print(views);
         final String out = buffer.toString();
 
-        
         // Header checks
-        assertTrue(out.contains("Start(Local)"), "Local-times header should be present when enabled");
+        assertTrue(out.contains("Start(Local)"),
+                "Local-times header should be present when BOTH time modes are enabled");
 
         // Row checks
         assertTrue(out.contains("KJFK"), "Should include the location KJFK");

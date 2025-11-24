@@ -54,8 +54,11 @@ public class SimplePrioritizer implements NotamPrioritizer {
         return copy;
     }
 
-    /* package-private for focused tests */
-    double score(final Notam n) {
+    /**
+     * Returns the raw priority score for this NOTAM.
+     * Higher values indicate higher priority.
+     */
+    public double score(final Notam n) {
         double s = 0.0;
         s += typeScore(n.getType());
         s += keywordScore(n.getText());

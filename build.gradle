@@ -15,7 +15,7 @@ dependencies {
 
     // Apache Commons
     implementation 'commons-cli:commons-cli:1.10.0'
-
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
     // JUnit 5
     testImplementation libs.junit.jupiter
     testRuntimeOnly  libs.junit.platform.launcher 
