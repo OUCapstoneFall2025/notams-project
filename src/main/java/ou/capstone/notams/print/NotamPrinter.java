@@ -19,46 +19,39 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class NotamPrinter {
 
+    public enum TimeMode { UTC_ONLY, LOCAL_ONLY, BOTH }
 
-	public enum TimeMode { UTC_ONLY, LOCAL_ONLY, BOTH }
-
-	protected final ZoneId localZoneId;
+    protected final ZoneId localZoneId;
     protected final TimeMode timeMode;
 
-
-
-    // Column widths
     protected static final int LOCATION_COL_WIDTH        = 4;
     protected static final int NUMBER_COL_WIDTH          = 10;
-    protected static final int CLASSIFICATION_COL_WIDTH  = 12;
+    protected static final int TYPE_COL_WIDTH            = 12;
     protected static final int START_TIMESTAMP_COL_WIDTH = 16;
     protected static final int END_TIMESTAMP_COL_WIDTH   = 16;
     protected static final int SCORE_COL_WIDTH           = 6;
     protected static final int CONDITION_COL_WIDTH       = 72;
 
-    
     protected static final DateTimeFormatter UTC_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm'Z'").withZone(ZoneOffset.UTC);
     protected static final DateTimeFormatter LOCAL_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z");
 
-    
     /** Default: both UTC + local time */
     public NotamPrinter(final ZoneId localZoneId) {
         this(localZoneId, TimeMode.BOTH);
     }
-    
+
     public NotamPrinter(final ZoneId localZoneId,
                         final boolean includeLocalTimes) {
-    	 this(localZoneId, includeLocalTimes ? TimeMode.BOTH : TimeMode.UTC_ONLY);
+        this(localZoneId, includeLocalTimes ? TimeMode.BOTH : TimeMode.UTC_ONLY);
     }
 
-    
     public NotamPrinter(final ZoneId localZoneId,
                         final TimeMode timeMode) {
-    	   this.localZoneId = localZoneId;
-           this.timeMode = timeMode;
-       }
+        this.localZoneId = localZoneId;
+        this.timeMode = timeMode;
+    }
 
     /**
      * Print directly to stdout for CLI usage.
@@ -85,11 +78,11 @@ public class NotamPrinter {
         // Sort primarily by score (highest first), then by location, then by start time
         sorted.sort(
                 Comparator.comparing(NotamView::score,
-                                     Comparator.nullsLast(Comparator.reverseOrder()))
-                          .thenComparing(NotamView::location,
-                                         Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-                          .thenComparing(NotamView::startTimeUtc,
-                                         Comparator.nullsLast(Comparator.naturalOrder()))
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(NotamView::location,
+                                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                        .thenComparing(NotamView::startTimeUtc,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
         );
 
         final StringBuilder sb = new StringBuilder();
@@ -120,20 +113,19 @@ public class NotamPrinter {
         String header = String.format(Locale.ROOT, "%s  %s  %s  %s  %s  %s",
                 pad("Loc", LOCATION_COL_WIDTH),
                 pad("Number", NUMBER_COL_WIDTH),
-                pad("Class", CLASSIFICATION_COL_WIDTH),
+                pad("Type", TYPE_COL_WIDTH),
                 timeHeader,
                 pad("Score", SCORE_COL_WIDTH),
-                "Condition");
+                "NOTAM Text");
 
         if (timeMode == TimeMode.BOTH) {
-
-        	  final String locals = startHeaderLocal + "  " + endHeaderLocal;
-              header += "\n"
-                      + " ".repeat(LOCATION_COL_WIDTH
-                                 + NUMBER_COL_WIDTH
-                                 + CLASSIFICATION_COL_WIDTH
-                                 + 6)
-                      + locals; // plain (No ANSI dim here)
+            final String locals = startHeaderLocal + "  " + endHeaderLocal;
+            header += "\n"
+                    + " ".repeat(LOCATION_COL_WIDTH
+                    + NUMBER_COL_WIDTH
+                    + TYPE_COL_WIDTH
+                    + 6)
+                    + locals;
         }
         return header;
     }
@@ -141,28 +133,25 @@ public class NotamPrinter {
     private String buildSeparator() {
         final int total =
                 LOCATION_COL_WIDTH + 2
-              + NUMBER_COL_WIDTH + 2
-              + CLASSIFICATION_COL_WIDTH + 2
-              + START_TIMESTAMP_COL_WIDTH + 2
-              + END_TIMESTAMP_COL_WIDTH + 2
-              + SCORE_COL_WIDTH + 2
-              + CONDITION_COL_WIDTH;
+                        + NUMBER_COL_WIDTH + 2
+                        + TYPE_COL_WIDTH + 2
+                        + START_TIMESTAMP_COL_WIDTH + 2
+                        + END_TIMESTAMP_COL_WIDTH + 2
+                        + SCORE_COL_WIDTH + 2
+                        + CONDITION_COL_WIDTH;
         return "-".repeat(total);
     }
 
-
- // Row formatting no coloring
     /**
-     * Base row formatter: uses score for ordering and score column,
-     * but does not apply any ANSI coloring.
+     * Base row formatter: displays NOTAMs in traditional format with text wrapping.
      * {@link NotamColorPrinter} overrides this to add colors.
      */
     protected String formatRow(final NotamView n) {
         final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
         final String number         = pad(clamp(n.notamNumber(), NUMBER_COL_WIDTH), NUMBER_COL_WIDTH);
         final String classification = pad(
-                clamp(n.classification() == null ? "-" : n.classification(), CLASSIFICATION_COL_WIDTH),
-                CLASSIFICATION_COL_WIDTH
+                clamp(n.classification() == null ? "-" : n.classification(), TYPE_COL_WIDTH),
+                TYPE_COL_WIDTH
         );
 
         final String startUtc   = pad(formatUtc(n.startTimeUtc()),   START_TIMESTAMP_COL_WIDTH);
@@ -176,8 +165,27 @@ public class NotamPrinter {
                 SCORE_COL_WIDTH
         );
 
-        final String condition = clamp(n.conditionText(), CONDITION_COL_WIDTH);
-        
+        // Calculate indent for wrapped text lines
+        final int conditionIndent = LOCATION_COL_WIDTH + 2
+                + NUMBER_COL_WIDTH + 2
+                + TYPE_COL_WIDTH + 2
+                + START_TIMESTAMP_COL_WIDTH + 2
+                + END_TIMESTAMP_COL_WIDTH + 2
+                + SCORE_COL_WIDTH + 2;
+
+        // Format in traditional NOTAM format and wrap text (no truncation)
+        final String traditionalNotam = n.formatTraditionalNotam();
+        final String wrappedCondition = wrapText(traditionalNotam);
+        final String[] lines = wrappedCondition.split("\n");
+        final StringBuilder formattedCondition = new StringBuilder();
+
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                formattedCondition.append('\n').append(" ".repeat(conditionIndent));
+            }
+            formattedCondition.append(lines[i]);
+        }
+
         final String timeCols = switch (timeMode) {
             case UTC_ONLY   -> startUtc + "  " + endUtc;
             case LOCAL_ONLY -> startLocal + "  " + endLocal;
@@ -185,11 +193,10 @@ public class NotamPrinter {
         };
 
         String line = String.format("%s  %s  %s  %s  %s  %s",
-                location, number, classification, timeCols, scoreText, condition);
+                location, number, classification, timeCols, scoreText, formattedCondition);
 
         if (timeMode == TimeMode.BOTH) {
-
-            final String localLine = " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + CLASSIFICATION_COL_WIDTH + 6)
+            final String localLine = " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + TYPE_COL_WIDTH + 6)
                     + startLocal + "  " + endLocal;
             line += "\n" + localLine;
         }
@@ -197,14 +204,13 @@ public class NotamPrinter {
         return line;
     }
 
-    // Tiny helpers 
+    // Helper methods
 
     protected static String pad(final String value, final int width) {
         final String v = (value == null) ? "-" : value;
         return StringUtils.rightPad(v, width);
     }
 
-    
     protected static String clamp(final String text, final int maxLength) {
         if (text == null) {
             return "-";
@@ -225,5 +231,68 @@ public class NotamPrinter {
             return "-";
         }
         return LOCAL_FORMATTER.format(instant.atZone(localZoneId));
+    }
+
+    /**
+     * Wraps text to multiple lines for the condition column.
+     * Tries to break at spaces, but will break long words if necessary.
+     * No truncation - full NOTAM content is always displayed.
+     *
+     * @param text the text to wrap
+     * @return the wrapped text with newlines
+     */
+    protected static String wrapText(final String text) {
+        if (text == null || text.length() <= CONDITION_COL_WIDTH) {
+            return text;
+        }
+
+        final StringBuilder result = new StringBuilder();
+        final String[] words = text.split(" ");
+        StringBuilder currentLine = new StringBuilder();
+
+        for (String word : words) {
+            int potentialLength = currentLine.length() + (!currentLine.isEmpty() ? 1 : 0) + word.length();
+
+            if (potentialLength > CONDITION_COL_WIDTH && !currentLine.isEmpty()) {
+                if (!result.isEmpty()) {
+                    result.append('\n');
+                }
+                result.append(currentLine);
+                currentLine = new StringBuilder();
+            }
+
+            if (word.length() > CONDITION_COL_WIDTH) {
+                // Handle words longer than column width
+                if (!currentLine.isEmpty()) {
+                    if (!result.isEmpty()) {
+                        result.append('\n');
+                    }
+                    result.append(currentLine);
+                    currentLine = new StringBuilder();
+                }
+
+                // Break long word across multiple lines
+                for (int i = 0; i < word.length(); i += CONDITION_COL_WIDTH) {
+                    if (!result.isEmpty()) {
+                        result.append('\n');
+                    }
+                    result.append(word, i, Math.min(i + CONDITION_COL_WIDTH, word.length()));
+                }
+            } else {
+                if (!currentLine.isEmpty()) {
+                    currentLine.append(' ');
+                }
+                currentLine.append(word);
+            }
+        }
+
+        if (!currentLine.isEmpty()) {
+            if (!result.isEmpty()) {
+                result.append('\n');
+            }
+            result.append(currentLine);
+        }
+
+        return result.toString();
     }
 }
