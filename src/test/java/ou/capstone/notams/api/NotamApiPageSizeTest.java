@@ -1,6 +1,5 @@
 package ou.capstone.notams.api;
 
-import ou.capstone.notams.ConnectToAPI;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -39,7 +38,7 @@ class NotamApiPageSizeTest {
 
     @BeforeAll
     static void validateSetup() {
-        ConnectToAPI.validateCredentials();
+        FaaNotamApiWrapper.validateCredentials();
         logger.info("Starting page size performance test");
         logger.info("Test location: lat={}, lon={}, radius={} NM",
                 TEST_LATITUDE, TEST_LONGITUDE, TEST_RADIUS_NM);
@@ -74,11 +73,11 @@ class NotamApiPageSizeTest {
         try {
             final long startTime = System.currentTimeMillis();
 
-            final ConnectToAPI.QueryParamsBuilder queryParams =
-                    new ConnectToAPI.QueryParamsBuilder(TEST_LATITUDE, TEST_LONGITUDE, TEST_RADIUS_NM)
+            final FaaNotamApiWrapper.QueryParamsBuilder queryParams =
+                    new FaaNotamApiWrapper.QueryParamsBuilder(TEST_LATITUDE, TEST_LONGITUDE, TEST_RADIUS_NM)
                             .pageSize(String.valueOf(pageSize));
 
-            final String response = ConnectToAPI.fetchRawJson(queryParams);
+            final String response = FaaNotamApiWrapper.fetchRawJson(queryParams);
 
             final long elapsedTime = System.currentTimeMillis() - startTime;
             final int notamCount = countNotams(response);

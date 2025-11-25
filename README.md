@@ -58,13 +58,13 @@ This runs `ConnectToAPI` with mock data loaded from `src/main/resources/mock-faa
 ```bash
 export FAA_CLIENT_ID="your_client_id"
 export FAA_CLIENT_SECRET="your_client_secret"
-./gradlew run --main-class ou.capstone.notams.ConnectToAPI
+./gradlew run --main-class ou.capstone.notams.api.FaaNotamApiWrapper
 ```
 
 Or set the system property to use mock data:
 
 ```bash
-./gradlew run --main-class ou.capstone.notams.ConnectToAPI -DConnectToApi.UseMockData=true
+./gradlew run --main-class ou.capstone.notams.api.FaaNotamApiWrapper -DConnectToApi.UseMockData=true
 ```
 
 ### Run the main App (currently just parses airport codes):
