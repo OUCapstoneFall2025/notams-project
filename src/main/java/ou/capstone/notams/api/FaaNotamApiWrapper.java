@@ -14,8 +14,11 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,8 +38,8 @@ public final class FaaNotamApiWrapper
     private static final String FAA_DOMAIN = "external-api.faa.gov";
     private static final String NOTAM_API_PATH = "/notamapi/v1/notams";
     private static final String RESPONSE_FORMAT = "geoJson";
-    private static final String DEFAULT_PAGE_SIZE = "50";
-    private static final String DEFAULT_PAGE_NUM = "1";
+    private static final int DEFAULT_PAGE_SIZE = 50;
+    private static final int DEFAULT_PAGE_NUM = 1;
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_RADIUS_NM = 50;
@@ -79,8 +82,8 @@ public final class FaaNotamApiWrapper
         private final Double latitude;
         private final Double longitude;
         private final Integer radiusNm;
-        private String pageSize = DEFAULT_PAGE_SIZE;
-        private String pageNum = DEFAULT_PAGE_NUM;
+        private int pageSize = DEFAULT_PAGE_SIZE;
+        private int pageNum = DEFAULT_PAGE_NUM;
         private final String sortBy = "effectiveStartDate";
         private final String sortOrder = "Desc";
 
@@ -129,7 +132,7 @@ public final class FaaNotamApiWrapper
          * @param pageSize The page size (default: "50")
          * @return this builder for method chaining
          */
-        public QueryParamsBuilder pageSize(final String pageSize) {
+        public QueryParamsBuilder pageSize(final int pageSize) {
             this.pageSize = pageSize;
             return this;
         }
@@ -140,7 +143,7 @@ public final class FaaNotamApiWrapper
          * @param pageNum The page number (default: "1")
          * @return this builder for method chaining
          */
-        public QueryParamsBuilder pageNum(final String pageNum) {
+        public QueryParamsBuilder pageNum(final int pageNum) {
             this.pageNum = pageNum;
             return this;
         }
@@ -151,29 +154,34 @@ public final class FaaNotamApiWrapper
          * @return The URL-encoded query string
          */
         public String build() {
-            final List<String> params = new ArrayList<>();
+            final Map<String,Object> params = new HashMap<>();
 
-            params.add("responseFormat=" + enc(RESPONSE_FORMAT));
+            params.put( "responseFormat", RESPONSE_FORMAT );
 
             if (icaoLocation != null) {
                 logger.debug("Building ICAO-based query for location: {}", icaoLocation);
-                params.add("icaoLocation=" + enc(icaoLocation));
+                params.put( "icaoLocation", icaoLocation );
             } else {
-                logger.debug("Building coordinate-based query: lat={}, lon={}, radius={}nm",
+                logger.debug("Building coordinate-based query: lat={}, lon={}, radius={} nm",
                         latitude, longitude, radiusNm);
-                params.add("locationLatitude=" + enc(String.valueOf(latitude)));
-                params.add("locationLongitude=" + enc(String.valueOf(longitude)));
-                params.add("locationRadius=" + enc(String.valueOf(radiusNm)));
+                params.put( "locationLatitude", latitude );
+                params.put( "locationLongitude", longitude );
+                params.put( "locationRadius", radiusNm );
             }
-            params.add("classification=DOM");
-            params.add("pageSize=" + enc(pageSize));
-            params.add("pageNum=" + enc(pageNum));
-            params.add("sortBy=" + enc(sortBy));
-            params.add("sortOrder=" + enc(sortOrder));
+            params.put( "classification", "DOM" );
+            params.put( "pageSize", pageSize );
+            params.put( "pageNum", pageNum );
+            params.put( "sortBy", sortBy );
+            params.put( "sortOrder", sortOrder );
 
-            final String queryString = String.join("&", params);
+            final String queryString = params.entrySet().stream()
+                    .map( e -> String.format( "%s=%s",
+                            URLEncoder.encode( e.getKey(),
+                                    StandardCharsets.UTF_8 ),
+                            URLEncoder.encode( String.valueOf( e.getValue() ),
+                                    StandardCharsets.UTF_8 ) ) )
+                    .collect( Collectors.joining( "&" ) );
             logger.debug("Built query string: {}", queryString);
-
             return queryString;
         }
 
@@ -327,7 +335,7 @@ public final class FaaNotamApiWrapper
 
         while( currentPage < totalPages ) {
             final String nextResult = fetchRawJson( queryParams.pageNum(
-                    Integer.toString( currentPage + 1 ) ) );
+                     currentPage + 1 ) );
             final JsonNode thisPageRoot = mapper.readTree( nextResult );
             currentPage = thisPageRoot.get( "pageNum" ).asInt();
             allPages.add( nextResult );
@@ -360,9 +368,5 @@ public final class FaaNotamApiWrapper
             logger.error("Failed to load mock NOTAM data: {}", e.getMessage());
             throw new Exception("Failed to load mock NOTAM data", e);
         }
-    }
-
-    private static String enc(final String s) {
-        return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
 }

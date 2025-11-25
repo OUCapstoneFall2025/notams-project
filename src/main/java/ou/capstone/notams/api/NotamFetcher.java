@@ -106,7 +106,7 @@ public class NotamFetcher {
 
             try {
                 final QueryParamsBuilder queryParams =
-                    new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize("200");
+                    new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize(200);
                 final String rawJson = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
                 waypointNotams = parser.parseGeoJson(rawJson);
                 notams.addAll(waypointNotams);
@@ -181,7 +181,7 @@ public class NotamFetcher {
         final long t0 = System.currentTimeMillis();
 
         final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder(latitude, longitude, radiusNm)
-                .pageSize("200");
+                .pageSize(200);
 
         final String response = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
         List<Notam> waypointNotams = parser.parseGeoJson(response);
