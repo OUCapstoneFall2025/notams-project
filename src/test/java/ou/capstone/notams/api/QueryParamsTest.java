@@ -2,8 +2,6 @@ package ou.capstone.notams.api;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import javax.management.Query;
-
 import org.junit.jupiter.api.Test;
 
 public class QueryParamsTest
@@ -23,15 +21,15 @@ public class QueryParamsTest
 
     @Test
     public void testPageSize() {
-        final String pageSize = "999";
-        final FaaNotamApiWrapper.QueryParamsBuilder qpb = new FaaNotamApiWrapper.QueryParamsBuilder( "KOKC" ).pageSize("999");
+        final int pageSize = 999;
+        final FaaNotamApiWrapper.QueryParamsBuilder qpb = new FaaNotamApiWrapper.QueryParamsBuilder( "KOKC" ).pageSize(999);
         assertTrue( qpb.build().contains("pageSize=" + pageSize), "QueryParamsBuilder did not use correct page size" );
     }
 
     @Test
     public void testPageNum() {
-        final String pageNum = "999";
-        final FaaNotamApiWrapper.QueryParamsBuilder qpb = new FaaNotamApiWrapper.QueryParamsBuilder( "KOKC" ).pageNum("999");
+        final int pageNum = 999;
+        final FaaNotamApiWrapper.QueryParamsBuilder qpb = new FaaNotamApiWrapper.QueryParamsBuilder( "KOKC" ).pageNum(999);
         assertTrue( qpb.build().contains("pageNum=" + pageNum), "QueryParamsBuilder did not use correct page size" );
     }
 }

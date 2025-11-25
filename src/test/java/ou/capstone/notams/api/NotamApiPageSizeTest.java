@@ -75,7 +75,7 @@ class NotamApiPageSizeTest {
 
             final FaaNotamApiWrapper.QueryParamsBuilder queryParams =
                     new FaaNotamApiWrapper.QueryParamsBuilder(TEST_LATITUDE, TEST_LONGITUDE, TEST_RADIUS_NM)
-                            .pageSize(String.valueOf(pageSize));
+                            .pageSize(pageSize);
 
             final String response = FaaNotamApiWrapper.fetchRawJson(queryParams);
 
