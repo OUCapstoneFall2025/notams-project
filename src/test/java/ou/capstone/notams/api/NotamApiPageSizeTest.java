@@ -15,6 +15,8 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import ou.capstone.notams.Notam;
+
 /**
  * Performance test for NOTAM API page size optimization.
  * Tests various page sizes to determine optimal configuration.
@@ -77,10 +79,15 @@ class NotamApiPageSizeTest {
                     new FaaNotamApiWrapper.QueryParamsBuilder(TEST_LATITUDE, TEST_LONGITUDE, TEST_RADIUS_NM)
                             .pageSize(pageSize);
 
-            final String response = FaaNotamApiWrapper.fetchRawJson(queryParams);
+            final List<String> responses = FaaNotamApiWrapper.fetchAllPages(queryParams);
 
             final long elapsedTime = System.currentTimeMillis() - startTime;
-            final int notamCount = countNotams(response);
+
+            final NotamParser notamParser = new NotamParser();
+            // Note: this time will now count fetching _all_ pages of notams
+            final List<Notam> notams = responses.stream().map( notamParser::parseGeoJson ).flatMap( List::stream ).toList();
+            final int notamCount = notams.size();
+
             final boolean morePages = notamCount >= pageSize;
 
             logger.debug("Page size {} completed: {} ms, {} NOTAMs",

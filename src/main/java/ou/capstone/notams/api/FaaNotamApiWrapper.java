@@ -236,7 +236,10 @@ public final class FaaNotamApiWrapper
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    public static String fetchRawJson(final QueryParamsBuilder queryParams, final Integer timeoutSeconds) throws Exception {
+    private static String fetchRawJson( final QueryParamsBuilder queryParams,
+                                        final int timeoutSeconds )
+       throws Exception
+    {
         logger.debug("Fetching NOTAMs with query parameters: {}", queryParams);
 
         // Check if we should use mock data (set via -DConnectToApi.UseMockData=true)
@@ -261,13 +264,13 @@ public final class FaaNotamApiWrapper
             logger.debug("Full URL: {}", uri);
             logger.debug("Client ID: {}...", clientId != null && clientId.length() > 4 ? clientId.substring(0, 4) : "****");
             logger.debug("Client Secret: [REDACTED - {} characters]", clientSecret != null ? clientSecret.length() : 0);
-            logger.debug("Timeout: {} seconds", timeoutSeconds != null ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS);
+            logger.debug("Timeout: {} seconds", timeoutSeconds != -1 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS);
             logger.debug("===============================");
         } else {
             logger.debug("Requesting URL: {}", uri);
         }
 
-        final int timeout = timeoutSeconds != null ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
+        final int timeout = timeoutSeconds != -1 ? timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
 
         final HttpRequest request = HttpRequest.newBuilder(uri)
                 .GET()
@@ -317,16 +320,22 @@ public final class FaaNotamApiWrapper
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    public static String fetchRawJson(final QueryParamsBuilder queryParams) throws Exception {
-        return fetchRawJson(queryParams, null);
+    protected static String fetchRawJson( final QueryParamsBuilder queryParams ) throws Exception {
+        return fetchRawJson(queryParams, -1);
     }
 
     public static List<String> fetchAllPages( final QueryParamsBuilder queryParams )
         throws Exception
     {
+        return fetchAllPages( queryParams, -1 );
+    }
+
+    public static List<String> fetchAllPages( final QueryParamsBuilder queryParams, final int timeoutInSeconds )
+        throws Exception
+    {
         final List<String> allPages = new ArrayList<>();
 
-        final String firstResult = fetchRawJson( queryParams );
+        final String firstResult = fetchRawJson( queryParams, timeoutInSeconds );
         final ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree( firstResult );
         int currentPage = root.get( "pageNum" ).asInt();
@@ -335,7 +344,7 @@ public final class FaaNotamApiWrapper
 
         while( currentPage < totalPages ) {
             final String nextResult = fetchRawJson( queryParams.pageNum(
-                     currentPage + 1 ) );
+                     currentPage + 1 ), timeoutInSeconds );
             final JsonNode thisPageRoot = mapper.readTree( nextResult );
             currentPage = thisPageRoot.get( "pageNum" ).asInt();
             allPages.add( nextResult );
