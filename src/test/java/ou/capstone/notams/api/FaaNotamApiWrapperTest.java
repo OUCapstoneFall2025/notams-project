@@ -35,11 +35,16 @@ public class FaaNotamApiWrapperTest
             wrapper.when( FaaNotamApiWrapper::validateCredentials )
                     .thenAnswer( invocation -> null );
 
-            wrapper.when( () -> FaaNotamApiWrapper.fetchAllPages( ArgumentMatchers.any() )).thenCallRealMethod();
+            wrapper.when( () -> FaaNotamApiWrapper.fetchAllPages(
+                    ArgumentMatchers.any() ) ).thenCallRealMethod();
+            wrapper.when( () -> FaaNotamApiWrapper.fetchAllPages(
+                            ArgumentMatchers.any(), ArgumentMatchers.anyInt() ) )
+                    .thenCallRealMethod();
 
-            wrapper.when( () -> FaaNotamApiWrapper.fetchRawJson( ArgumentMatchers.any() ) )
-                    .thenReturn( Files.readString(
-                            Path.of( "src/test/resources/pages/okc-page-1.json" ) ) )
+            wrapper.when( () -> FaaNotamApiWrapper.fetchRawJson(
+                            ArgumentMatchers.any(), ArgumentMatchers.anyInt() ) )
+                    .thenReturn( Files.readString( Path.of(
+                            "src/test/resources/pages/okc-page-1.json" ) ) )
                     .thenReturn( Files.readString( Path.of(
                             "src/test/resources/pages/okc-page-2.json" ) ) );
 
