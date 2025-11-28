@@ -236,7 +236,7 @@ public final class FaaNotamApiWrapper
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    private static String fetchRawJson( final QueryParamsBuilder queryParams,
+    protected static String fetchRawJson( final QueryParamsBuilder queryParams,
                                         final int timeoutSeconds )
        throws Exception
     {
