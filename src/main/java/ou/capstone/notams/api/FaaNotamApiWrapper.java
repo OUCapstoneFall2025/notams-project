@@ -15,12 +15,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Utility class for connecting to the FAA NOTAM API.
  * Provides reusable methods for fetching raw NOTAM JSON data with support for both
  * ICAO location-based and coordinate-based queries.
- *
+ * <p>
  * To run with verbose logging use -DConnectToApi.VerboseLogging=true
  */
 public final class FaaNotamApiWrapper
@@ -146,7 +150,7 @@ public final class FaaNotamApiWrapper
          *
          * @return The URL-encoded query string
          */
-        private String build() {
+        public String build() {
             final List<String> params = new ArrayList<>();
 
             params.add("responseFormat=" + enc(RESPONSE_FORMAT));
@@ -190,6 +194,28 @@ public final class FaaNotamApiWrapper
                     .append(", sortOrder='").append(sortOrder).append('\'')
                     .append('}');
             return sb.toString();
+        }
+
+        @Override
+        public boolean equals( Object o )
+        {
+            if( o == null || getClass() != o.getClass() ) {
+                return false;
+            }
+            QueryParamsBuilder that = (QueryParamsBuilder) o;
+            return Objects.equals( icaoLocation, that.icaoLocation )
+                    && Objects.equals( latitude, that.latitude )
+                    && Objects.equals( longitude, that.longitude )
+                    && Objects.equals( radiusNm, that.radiusNm )
+                    && Objects.equals( pageSize, that.pageSize )
+                    && Objects.equals( pageNum, that.pageNum );
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return Objects.hash( icaoLocation, latitude, longitude, radiusNm,
+                    pageSize, pageNum, sortBy, sortOrder );
         }
     }
 
@@ -285,6 +311,29 @@ public final class FaaNotamApiWrapper
      */
     public static String fetchRawJson(final QueryParamsBuilder queryParams) throws Exception {
         return fetchRawJson(queryParams, null);
+    }
+
+    public static List<String> fetchAllPages( final QueryParamsBuilder queryParams )
+        throws Exception
+    {
+        final List<String> allPages = new ArrayList<>();
+
+        final String firstResult = fetchRawJson( queryParams );
+        final ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree( firstResult );
+        int currentPage = root.get( "pageNum" ).asInt();
+        final int totalPages = root.get( "totalPages" ).asInt();
+        allPages.add( firstResult );
+
+        while( currentPage < totalPages ) {
+            final String nextResult = fetchRawJson( queryParams.pageNum(
+                    Integer.toString( currentPage + 1 ) ) );
+            final JsonNode thisPageRoot = mapper.readTree( nextResult );
+            currentPage = thisPageRoot.get( "pageNum" ).asInt();
+            allPages.add( nextResult );
+        }
+
+        return allPages;
     }
 
     /**
