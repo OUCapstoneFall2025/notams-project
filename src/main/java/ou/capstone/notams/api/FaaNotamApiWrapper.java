@@ -235,14 +235,6 @@ public final class FaaNotamApiWrapper
     {
         logger.debug("Fetching NOTAMs with query parameters: {}", queryParams);
 
-        // Check if we should use mock data (set via -DConnectToApi.UseMockData=true)
-        final String useMockData = System.getProperty("ConnectToApi.UseMockData");
-        if ("true".equalsIgnoreCase(useMockData)) {
-            logger.info("Using mock data (ConnectToApi.UseMockData system property is set)");
-            return loadMockJson();
-        }
-
-        // Validate credentials
         validateCredentials();
 
         final String clientId = System.getenv("FAA_CLIENT_ID");
@@ -378,31 +370,5 @@ public final class FaaNotamApiWrapper
         }
 
         return allPages;
-    }
-
-    /**
-     * Loads mock NOTAM JSON data from resources for testing/development purposes.
-     *
-     * @return The raw JSON string from the mock data file
-     * @throws Exception if the mock data file cannot be read
-     */
-    private static String loadMockJson() throws Exception {
-        logger.info("Loading mock NOTAM data from resources");
-
-        try (final InputStream inputStream = FaaNotamApiWrapper.class.getClassLoader()
-                .getResourceAsStream("mock-faa-response.json")) {
-
-            if (inputStream == null) {
-                throw new IOException("Mock data file 'mock-faa-response.json' not found in resources");
-            }
-
-            final String mockJson = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            logger.info("Successfully loaded mock NOTAM JSON");
-            return mockJson;
-
-        } catch (IOException e) {
-            logger.error("Failed to load mock NOTAM data: {}", e.getMessage());
-            throw new Exception("Failed to load mock NOTAM data", e);
-        }
     }
 }
