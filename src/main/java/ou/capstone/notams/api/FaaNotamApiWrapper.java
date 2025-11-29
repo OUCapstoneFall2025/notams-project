@@ -4,8 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,8 +20,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import ou.capstone.notams.exceptions.NotamException;
 
 /**
  * Utility class for connecting to the FAA NOTAM API.
@@ -234,11 +237,10 @@ public final class FaaNotamApiWrapper
      * @param queryParams The query parameters builder
      * @param timeoutSeconds Optional timeout in seconds (defaults to 30 if null)
      * @return The raw JSON response as a String
-     * @throws Exception if API call fails or credentials are missing
      */
     protected static String fetchRawJson( final QueryParamsBuilder queryParams,
-                                        final int timeoutSeconds )
-       throws Exception
+                                          final int timeoutSeconds )
+            throws NotamException
     {
         logger.debug("Fetching NOTAMs with query parameters: {}", queryParams);
 
@@ -256,7 +258,14 @@ public final class FaaNotamApiWrapper
         final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
 
         final String queryString = queryParams.build();
-        final URI uri = new URI("https", FAA_DOMAIN, NOTAM_API_PATH, queryString, null);
+        final URI uri;
+        try {
+            uri = new URI("https", FAA_DOMAIN, NOTAM_API_PATH, queryString, null);
+        }
+        catch( final URISyntaxException e ) {
+            logger.error( "Bad syntax in URL? ", e);
+            throw new NotamException(e);
+        }
 
         // Verbose debug logging (only if enabled via system property)
         if (isVerboseLoggingEnabled()) {
@@ -279,8 +288,18 @@ public final class FaaNotamApiWrapper
                 .timeout(Duration.ofSeconds(timeout))
                 .build();
 
-        final HttpClient http = HttpClient.newHttpClient();
-        final HttpResponse<String> response = http.send(request, BodyHandlers.ofString());
+        final HttpResponse<String> response;
+        try (final HttpClient http = HttpClient.newHttpClient()) {
+            response = http.send( request, BodyHandlers.ofString() );
+        }
+        catch( final IOException e ) {
+            logger.error( "Could not make HTTP request to API", e );
+            throw new NotamException( e );
+        }
+        catch( final InterruptedException e ) {
+            logger.error( "Interrupted while making HTTP request to API", e );
+            throw new NotamException( e );
+        }
 
         logger.info("FAA API response status: {}", response.statusCode());
 
@@ -308,7 +327,7 @@ public final class FaaNotamApiWrapper
         } else {
             logger.error("FAA API returned non-200 status: {}. URL: {}", response.statusCode(), uri);
             logger.error("Response body: {}", response.body());
-            throw new IOException("FAA API returned non-200 status: " + response.statusCode());
+            throw new NotamException("FAA API returned non-200 status: " + response.statusCode());
         }
     }
 
@@ -320,24 +339,34 @@ public final class FaaNotamApiWrapper
      * @return The raw JSON response as a String
      * @throws Exception if API call fails or credentials are missing
      */
-    protected static String fetchRawJson( final QueryParamsBuilder queryParams ) throws Exception {
+    protected static String fetchRawJson( final QueryParamsBuilder queryParams )
+            throws NotamException
+    {
         return fetchRawJson(queryParams, -1);
     }
 
     public static List<String> fetchAllPages( final QueryParamsBuilder queryParams )
-        throws Exception
+            throws NotamException
     {
         return fetchAllPages( queryParams, -1 );
     }
 
-    public static List<String> fetchAllPages( final QueryParamsBuilder queryParams, final int timeoutInSeconds )
-        throws Exception
+    public static List<String> fetchAllPages( final QueryParamsBuilder queryParams,
+                                              final int timeoutInSeconds )
+            throws NotamException
     {
         final List<String> allPages = new ArrayList<>();
 
         final String firstResult = fetchRawJson( queryParams, timeoutInSeconds );
         final ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree( firstResult );
+        JsonNode root = null;
+        try {
+            root = mapper.readTree( firstResult );
+        }
+        catch( final JsonProcessingException e ) {
+            logger.error( "Unable to process JSON response from API", e );
+            throw new NotamException( e );
+        }
         int currentPage = root.get( "pageNum" ).asInt();
         final int totalPages = root.get( "totalPages" ).asInt();
         allPages.add( firstResult );
@@ -345,7 +374,14 @@ public final class FaaNotamApiWrapper
         while( currentPage < totalPages ) {
             final String nextResult = fetchRawJson( queryParams.pageNum(
                      currentPage + 1 ), timeoutInSeconds );
-            final JsonNode thisPageRoot = mapper.readTree( nextResult );
+            final JsonNode thisPageRoot;
+            try {
+                thisPageRoot = mapper.readTree( nextResult );
+            }
+            catch( final JsonProcessingException e ) {
+                logger.error( "Unable to process JSON response from API", e );
+                throw new NotamException( e );
+            }
             currentPage = thisPageRoot.get( "pageNum" ).asInt();
             allPages.add( nextResult );
         }
