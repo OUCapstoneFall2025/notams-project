@@ -31,11 +31,10 @@ import ou.capstone.notams.exceptions.NotamException;
  * Provides reusable methods for fetching raw NOTAM JSON data with support for both
  * ICAO location-based and coordinate-based queries.
  * <p>
- * To run with verbose logging use -DConnectToApi.VerboseLogging=true
+ * To run with verbose logging use -DFaaNotamApiWrapper.VerboseLogging=true
  */
 public final class FaaNotamApiWrapper
 {
-
     private static final Logger logger = LoggerFactory.getLogger(FaaNotamApiWrapper.class);
 
     private static final String FAA_DOMAIN = "external-api.faa.gov";
@@ -47,8 +46,9 @@ public final class FaaNotamApiWrapper
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_RADIUS_NM = 50;
 
-    // System property to enable verbose debug logging
-    private static final String VERBOSE_LOGGING_PROPERTY = "ConnectToApi.VerboseLogging";
+    private static final boolean VERBOSE_LOGGING_ENABLED = System.getProperty(
+                    "FaaNotamApiWrapper.VerboseLogging", "false" )
+            .equalsIgnoreCase( "true" );
 
     /**
      * Validates that FAA API credentials are available in environment variables or system properties.
@@ -64,15 +64,6 @@ public final class FaaNotamApiWrapper
             logger.error("FAA API credentials not found in environment variables");
             throw new IllegalStateException("FAA_CLIENT_ID or FAA_CLIENT_SECRET not set in environment!");
         }
-    }
-
-    /**
-     * Checks if verbose logging is enabled via system property.
-     *
-     * @return true if verbose logging is enabled
-     */
-    private static boolean isVerboseLoggingEnabled() {
-        return "true".equalsIgnoreCase(System.getProperty(VERBOSE_LOGGING_PROPERTY));
     }
 
     /**
@@ -268,7 +259,7 @@ public final class FaaNotamApiWrapper
         }
 
         // Verbose debug logging (only if enabled via system property)
-        if (isVerboseLoggingEnabled()) {
+        if (VERBOSE_LOGGING_ENABLED) {
             logger.debug("=== FAA API Request Details ===");
             logger.debug("Full URL: {}", uri);
             logger.debug("Client ID: {}...", clientId != null && clientId.length() > 4 ? clientId.substring(0, 4) : "****");
@@ -307,7 +298,7 @@ public final class FaaNotamApiWrapper
             final String responseBody = response.body();
 
             // Verbose logging of response details (only if enabled)
-            if (isVerboseLoggingEnabled()) {
+            if (VERBOSE_LOGGING_ENABLED) {
                 logger.debug("=== FAA API Response Details ===");
                 logger.debug("Response Body Length: {} characters", responseBody.length());
 
