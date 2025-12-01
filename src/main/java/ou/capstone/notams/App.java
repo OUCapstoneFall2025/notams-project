@@ -9,6 +9,7 @@ import ou.capstone.notams.print.NotamPrinter;
 import ou.capstone.notams.print.NotamPrinter.TimeMode;
 import ou.capstone.notams.print.NotamColorPrinter;
 import ou.capstone.notams.print.OutputConfig;
+import ou.capstone.notams.exceptions.RateLimitException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -188,6 +189,12 @@ public final class App {
             displayResults(prioritizedNotams, departureCode, destinationCode, prioritizer);
 
             logger.info("NOTAM Prioritization System completed successfully");
+        } catch (final RateLimitException e) {
+            System.err.println("FAA API Rate Limit Exceeded");
+            System.err.println("\n" + "-".repeat(80));
+            System.err.println("\nThe FAA NOTAM API has reached its rate limit.");
+            System.err.println("Please wait a few minutes before trying again.");
+            exitHandler.exit(1);
 
         } catch (final IllegalStateException e) {
             logger.error("Configuration error: {}", e.getMessage());
@@ -273,7 +280,6 @@ public final class App {
      * @param prioritizedNotams list of NOTAMs already sorted by priority
      * @param departureCode departure airport code
      * @param destinationCode destination airport code
-     * @param outputConfig configuration for output formatting
      */
     private static void displayResults(final List<Notam> prioritizedNotams,
                                        final String departureCode,

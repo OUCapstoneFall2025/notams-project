@@ -12,6 +12,7 @@ import ou.capstone.notams.Notam;
 import ou.capstone.notams.route.Coordinate;
 import ou.capstone.notams.route.RouteCalculator;
 import ou.capstone.notams.validation.AirportDirectory;
+import ou.capstone.notams.exceptions.RateLimitException;
 
 /**
  * Uses ConnectToAPI for all FAA NOTAM queries and converts JSON into NOTAM objects using NotamParser.
@@ -110,6 +111,8 @@ public class NotamFetcher {
                 final String rawJson = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
                 waypointNotams = parser.parseGeoJson(rawJson);
                 notams.addAll(waypointNotams);
+            } catch (final RateLimitException e) {
+                throw e;
             } catch (final Exception e) {
                 logger.warn("Skipping waypoint ({}, {}) due to error: {}",
                         waypoint.getLatitude(), waypoint.getLongitude(), e.getMessage());

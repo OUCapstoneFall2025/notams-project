@@ -1,5 +1,7 @@
 package ou.capstone.notams.api;
 
+import ou.capstone.notams.exceptions.RateLimitException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -302,6 +304,10 @@ public final class FaaNotamApiWrapper
             }
 
             return responseBody;
+        } else if (response.statusCode() == 429) {
+            logger.warn("FAA API rate limit exceeded. URL: {}", uri);
+            logger.debug("Rate limit response body: {}", response.body());
+            throw new RateLimitException("FAA API rate limit has been exceeded. Please wait a few minutes and try again.");
         } else {
             logger.error("FAA API returned non-200 status: {}. URL: {}", response.statusCode(), uri);
             logger.error("Response body: {}", response.body());
