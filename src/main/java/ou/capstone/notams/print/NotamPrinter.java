@@ -14,10 +14,14 @@ import org.apache.commons.lang3.StringUtils;
 /**
  * Console printer for NOTAMs (no ANSI colors).
  *
+ * Subclasses customize how each NOTAM row is styled (colors, emphasis, etc.)
+ * via {@link #decorateConditionLine(NotamView, String, Double)} and
+ * {@link #decorateLocalTimeRow(NotamView, String)}.
+ * 
  * Provides both {@link #print(List)} for CLI stdout and {@link #render(List)}
  * for tests/logging.
  */
-public class NotamPrinter {
+public abstract class NotamPrinter {
 
     public enum TimeMode { UTC_ONLY, LOCAL_ONLY, BOTH }
 
@@ -95,7 +99,23 @@ public class NotamPrinter {
 
         return sb.toString();
     }
-
+    // Hooks for subclasses
+    
+    // Customize each wrapped NOTAM text line.
+    protected abstract String decorateConditionLine(
+            NotamView n,
+            String line,
+            Double score
+    );
+    
+    // Customize the local time row when TimeMode == BOTH.
+    protected String decorateLocalTimeRow(
+            final NotamView n,
+            final String localTimes
+    ) {
+        return localTimes;
+    }
+    
     // Header & separators
 
     private String buildHeader() {
@@ -146,7 +166,7 @@ public class NotamPrinter {
      * Base row formatter: displays NOTAMs in traditional format with text wrapping.
      * {@link NotamColorPrinter} overrides this to add colors.
      */
-    protected String formatRow(final NotamView n) {
+    protected final String formatRow(final NotamView n) {
         final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
         final String number         = pad(clamp(n.notamNumber(), NUMBER_COL_WIDTH), NUMBER_COL_WIDTH);
         final String classification = pad(
@@ -183,7 +203,8 @@ public class NotamPrinter {
             if (i > 0) {
                 formattedCondition.append('\n').append(" ".repeat(conditionIndent));
             }
-            formattedCondition.append(lines[i]);
+            final String decorated = decorateConditionLine(n, lines[i], scoreValue);
+            formattedCondition.append(decorated);
         }
 
         final String timeCols = switch (timeMode) {
@@ -196,8 +217,11 @@ public class NotamPrinter {
                 location, number, classification, timeCols, scoreText, formattedCondition);
 
         if (timeMode == TimeMode.BOTH) {
-            final String localLine = " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + TYPE_COL_WIDTH + 6)
-                    + startLocal + "  " + endLocal;
+            final String localTimes = startLocal + "  " + endLocal;
+            final String decoratedLocalTimes = decorateLocalTimeRow(n, localTimes);
+            final String localLine =
+            " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + TYPE_COL_WIDTH + 6)
+                            + decoratedLocalTimes;
             line += "\n" + localLine;
         }
 
