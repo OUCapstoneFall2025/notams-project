@@ -89,6 +89,14 @@ public final class App {
                 .longOpt( "no-separate-metadata" )
                 .desc( "Do not separate metadata from NOTAM text (default)" ).get();
 
+        // CCS-79: New option for IFR/VFR flight mode
+        final Option modeOption = Option.builder()
+                .longOpt("mode")
+                .hasArg()
+                .argName("IFR|VFR")
+                .desc("Flight mode: 'IFR' or 'VFR' (default: IFR). Affects prioritization.")
+                .get();
+
         final Options options = new Options();
         options.addOption( departureAirportOption );
         options.addOption( destinationAirportOption );
@@ -99,6 +107,7 @@ public final class App {
         options.addOption( noDelimitersOption );
         options.addOption( separateMetadataOption );
         options.addOption( noSeparateMetadataOption );
+        options.addOption( modeOption );  //  added
 
         final CommandLineParser cliParser = new DefaultParser();
         final CommandLine line;
@@ -132,7 +141,20 @@ public final class App {
                     "Departure") + " airport code is required" );
         }
 
+        // CCS-79: Determine flight mode (IFR/VFR), defaulting to IFR
+        final String modeValue = line.getOptionValue(modeOption, "IFR");
+        final NotamPrioritizer.Mode flightMode;
+        if ("VFR".equalsIgnoreCase(modeValue)) {
+            flightMode = NotamPrioritizer.Mode.VFR;
+        } else if ("IFR".equalsIgnoreCase(modeValue)) {
+            flightMode = NotamPrioritizer.Mode.IFR;
+        } else {
+            logger.warn("Unknown flight mode '{}', defaulting to IFR", modeValue);
+            flightMode = NotamPrioritizer.Mode.IFR;
+        }
+
         logger.info( "NOTAM Prioritization System starting" );
+        logger.info( "Using flight mode: {}", flightMode );
 
         try {
             // Step 1: Get user input
@@ -179,7 +201,9 @@ public final class App {
                     notams.size(), uniqueNotams.size());
          
             // Step 5: Prioritize NOTAMs (delegated to SimplePrioritizer)
-            final NotamPrioritizer prioritizer = new SimplePrioritizer();
+            // CCS-79: pass route + mode into prioritizer
+            final NotamPrioritizer prioritizer =
+                    new SimplePrioritizer(validatedDepartureCode, validatedDestinationCode, flightMode);
             final List<Notam> prioritizedNotams = prioritizer.prioritize(uniqueNotams);
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
