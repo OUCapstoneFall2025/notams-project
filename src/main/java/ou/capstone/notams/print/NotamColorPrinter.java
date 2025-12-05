@@ -25,75 +25,30 @@ public final class NotamColorPrinter extends NotamPrinter {
     }
 
     @Override
-    protected String formatRow(final NotamView n) {
-        final String location       = pad(clamp(n.location(), LOCATION_COL_WIDTH), LOCATION_COL_WIDTH);
-        final String number         = pad(clamp(n.notamNumber(), NUMBER_COL_WIDTH), NUMBER_COL_WIDTH);
-        final String classification = pad(
-                clamp(n.classification() == null ? "-" : n.classification(), TYPE_COL_WIDTH),
-                TYPE_COL_WIDTH
-        );
-
-        final String startUtc   = pad(formatUtc(n.startTimeUtc()),   START_TIMESTAMP_COL_WIDTH);
-        final String endUtc     = pad(formatUtc(n.endTimeUtc()),     END_TIMESTAMP_COL_WIDTH);
-        final String startLocal = pad(formatLocal(n.startTimeUtc()), START_TIMESTAMP_COL_WIDTH);
-        final String endLocal   = pad(formatLocal(n.endTimeUtc()),   END_TIMESTAMP_COL_WIDTH);
-
-        final Double scoreValue = n.score();
-        final String scoreText  = pad(
-                scoreValue == null ? "-" : String.format(Locale.ROOT, "%.1f", scoreValue),
-                SCORE_COL_WIDTH
-        );
-
-        final int conditionIndent = LOCATION_COL_WIDTH + 2
-                + NUMBER_COL_WIDTH + 2
-                + TYPE_COL_WIDTH + 2
-                + START_TIMESTAMP_COL_WIDTH + 2
-                + END_TIMESTAMP_COL_WIDTH + 2
-                + SCORE_COL_WIDTH + 2;
-
-        final String traditionalNotam = n.formatTraditionalNotam();
-        final String wrappedCondition = wrapText(traditionalNotam);
-        final String[] lines = wrappedCondition.split("\n");
-        final StringBuilder formattedCondition = new StringBuilder();
-
-        for (int i = 0; i < lines.length; i++) {
-            if (i > 0) {
-                formattedCondition.append('\n').append(" ".repeat(conditionIndent));
-            }
-
-            // Apply color to each line based on score
-            final String coloredLine;
-            if (scoreValue == null) {
-                coloredLine = lines[i];
-            } else if (scoreValue >= RED_MIN_SCORE) {
-                coloredLine = ansi.colorRed(lines[i]);    // high priority
-            } else if (scoreValue >= YELLOW_MIN_SCORE) {
-                coloredLine = ansi.colorYellow(lines[i]); // medium priority
-            } else if (scoreValue >= 0.0) {
-                coloredLine = ansi.colorBlue(lines[i]);   // low priority
-            } else {
-                coloredLine = lines[i];
-            }
-
-            formattedCondition.append(coloredLine);
+    protected String decorateConditionLine(
+            final NotamView n,
+            final String line,
+            final Double scoreValue
+    ) {
+        if (scoreValue == null) {
+            return line;
+        } else if (scoreValue >= RED_MIN_SCORE) {
+            return ansi.colorRed(line);
+        } else if (scoreValue >= YELLOW_MIN_SCORE) {
+            return ansi.colorYellow(line);
+        } else if (scoreValue >= 0.0) {
+            return ansi.colorBlue(line);
+        } else {
+            return line;
         }
+    }
 
-        final String timeCols = switch (timeMode) {
-            case UTC_ONLY   -> startUtc + "  " + endUtc;
-            case LOCAL_ONLY -> startLocal + "  " + endLocal;
-            case BOTH       -> startUtc + "  " + endUtc;
-        };
-
-        String line = String.format("%s  %s  %s  %s  %s  %s",
-                location, number, classification, timeCols, scoreText, formattedCondition);
-
-        if (timeMode == TimeMode.BOTH) {
-            final String localLine =
-                    " ".repeat(LOCATION_COL_WIDTH + NUMBER_COL_WIDTH + TYPE_COL_WIDTH + 6)
-                            + ansi.dim(startLocal + "  " + endLocal);
-            line += "\n" + localLine;
-        }
-
-        return line;
+    @Override
+    protected String decorateLocalTimeRow(
+            final NotamView n,
+            final String localTimes
+    ) {
+        // Dims the local-time row when BOTH times are shown
+        return ansi.dim(localTimes);
     }
 }

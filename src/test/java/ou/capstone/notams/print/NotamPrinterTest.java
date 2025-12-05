@@ -31,7 +31,7 @@ final class NotamPrinterTest {
     @Test
     void printsEmptyState() {
         // Base printer, no color, default BOTH time mode
-        final NotamPrinter printer = new NotamPrinter(ZoneId.of("UTC"));
+        final NotamPrinter printer = new NotamPlainPrinter(ZoneId.of("UTC"));
         printer.print(List.of());
         final String out = buffer.toString();
 
@@ -43,7 +43,7 @@ final class NotamPrinterTest {
     void printsHeaderAndRows_withLocalTimesDisabled() {
         // Explicitly use UTC-only mode (no local times)
         final NotamPrinter printer =
-                new NotamPrinter(ZoneId.of("UTC"), NotamPrinter.TimeMode.UTC_ONLY);
+                new NotamPlainPrinter(ZoneId.of("UTC"), NotamPrinter.TimeMode.UTC_ONLY);
 
         final List<NotamView> views = List.of(
                 new NotamView(

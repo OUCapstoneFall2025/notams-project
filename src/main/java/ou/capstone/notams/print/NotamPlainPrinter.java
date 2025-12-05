@@ -11,4 +11,14 @@ public final class NotamPlainPrinter extends NotamPrinter {
     public NotamPlainPrinter(final ZoneId zoneId) {
         super(zoneId, TimeMode.BOTH);
     }
+    
+    @Override
+    protected String decorateConditionLine(
+            final NotamView n,
+            final String line,
+            final Double scoreValue
+    ) {
+        // No coloring 
+        return line;
+    }
 }
