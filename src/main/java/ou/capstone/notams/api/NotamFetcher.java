@@ -108,8 +108,9 @@ public class NotamFetcher {
             try {
                 final QueryParamsBuilder queryParams =
                     new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize(200);
-                final String rawJson = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
-                waypointNotams = parser.parseGeoJson(rawJson);
+                final List<String> results = FaaNotamApiWrapper.fetchAllPages(queryParams, HTTP_TIMEOUT_SECONDS);
+                waypointNotams = results.stream().map( parser::parseGeoJson )
+                        .flatMap( List::stream ).toList();
                 notams.addAll(waypointNotams);
             } catch (final RateLimitException e) {
                 throw e;
@@ -186,8 +187,10 @@ public class NotamFetcher {
         final FaaNotamApiWrapper.QueryParamsBuilder queryParams = new FaaNotamApiWrapper.QueryParamsBuilder(latitude, longitude, radiusNm)
                 .pageSize(200);
 
-        final String response = FaaNotamApiWrapper.fetchRawJson(queryParams, HTTP_TIMEOUT_SECONDS);
-        List<Notam> waypointNotams = parser.parseGeoJson(response);
+        final List<String> response = FaaNotamApiWrapper.fetchAllPages(queryParams, HTTP_TIMEOUT_SECONDS);
+        List<Notam> waypointNotams = response.stream()
+                .map( parser::parseGeoJson ).flatMap( List::stream )
+                .toList();
 
         final long t1 = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
