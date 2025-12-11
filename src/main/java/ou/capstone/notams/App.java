@@ -1,25 +1,11 @@
 package ou.capstone.notams;
 
-import ou.capstone.notams.api.NotamFetcher;
-import ou.capstone.notams.validation.AirportValidator;
-import ou.capstone.notams.validation.ValidationResult;
-import ou.capstone.notams.prioritize.SimplePrioritizer;
-import ou.capstone.notams.print.NotamView;
-import ou.capstone.notams.print.NotamPrinter;
-import ou.capstone.notams.print.NotamPrinter.TimeMode;
-import ou.capstone.notams.print.NotamColorPrinter;
-import ou.capstone.notams.print.OutputConfig;
-import ou.capstone.notams.exceptions.RateLimitException;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
-import java.util.Collections;
-
-import java.time.ZoneId;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -28,6 +14,19 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import ou.capstone.notams.api.NotamFetcher;
+import ou.capstone.notams.exceptions.RateLimitException;
+import ou.capstone.notams.print.NotamColorPrinter;
+import ou.capstone.notams.print.NotamPrinter;
+import ou.capstone.notams.print.NotamPrinter.TimeMode;
+import ou.capstone.notams.print.NotamView;
+import ou.capstone.notams.prioritize.NotamPrioritizer;
+import ou.capstone.notams.prioritize.SimplePrioritizer;
+import ou.capstone.notams.validation.AirportValidator;
+import ou.capstone.notams.validation.ValidationResult;
 
 /**
  * Main application driver for the NOTAM Prioritization System.
@@ -89,6 +88,18 @@ public final class App {
                 .longOpt( "no-separate-metadata" )
                 .desc( "Do not separate metadata from NOTAM text (default)" ).get();
 
+        // CCS-79: New option for IFR/VFR flight mode.
+        final Option flightModeOption = Option.builder()
+                .longOpt("flight-mode")
+                .hasArg()
+                .desc("Flight mode: 'IFR' or 'VFR' (default: IFR)")
+                .get();
+        final Option legacyModeOption = Option.builder()
+                .longOpt("mode")
+                .hasArg()
+                .desc("DEPRECATED alias for --flight-mode")
+                .get();
+
         final Options options = new Options();
         options.addOption( departureAirportOption );
         options.addOption( destinationAirportOption );
@@ -99,6 +110,8 @@ public final class App {
         options.addOption( noDelimitersOption );
         options.addOption( separateMetadataOption );
         options.addOption( noSeparateMetadataOption );
+        options.addOption( flightModeOption );
+        options.addOption( legacyModeOption );
 
         final CommandLineParser cliParser = new DefaultParser();
         final CommandLine line;
@@ -143,6 +156,27 @@ public final class App {
 
             logger.info("Route: {} to {}", departureCode, destinationCode);
 
+            // CCS-79: Determine flight mode (IFR or VFR), with --flight-mode.
+            final String modeValueRaw;
+            if (line.hasOption(flightModeOption)) {
+                modeValueRaw = line.getOptionValue(flightModeOption);
+            } else if (line.hasOption(legacyModeOption)) {
+                modeValueRaw = line.getOptionValue(legacyModeOption);
+                logger.warn("--mode is deprecated; please use --flight-mode instead.");
+            } else {
+                modeValueRaw = "IFR";
+            }
+
+            final NotamPrioritizer.Mode flightMode;
+            if ("VFR".equalsIgnoreCase(modeValueRaw)) {
+                flightMode = NotamPrioritizer.Mode.VFR;
+            } else if ("IFR".equalsIgnoreCase(modeValueRaw)) {
+                flightMode = NotamPrioritizer.Mode.IFR;
+            } else {
+                logger.warn("Unknown flight mode '{}', defaulting to IFR", modeValueRaw);
+                flightMode = NotamPrioritizer.Mode.IFR;
+            }
+
             // Step 2: Validate airports (delegated to AirportValidator)
             final AirportValidator validator = new AirportValidator();
 
@@ -172,18 +206,21 @@ public final class App {
             final List<Notam> notams = fetcher.fetchForRoute(validatedDepartureCode, validatedDestinationCode);
             // NOTAMs are parsed in NotamFetcher
             logger.info("Fetched {} NOTAMs", notams.size());
-            
+
             // Step 4: Deduplication
             final List<Notam> uniqueNotams = NotamDeduplication.dedup(notams);
             logger.info("Dedup result: {} → {} unique NOTAMs",
                     notams.size(), uniqueNotams.size());
-         
+
             // Step 5: Prioritize NOTAMs (delegated to SimplePrioritizer)
-            final SimplePrioritizer prioritizer = new SimplePrioritizer();
+            final NotamPrioritizer prioritizer =
+                    new SimplePrioritizer(Clock.systemUTC(),
+                            validatedDepartureCode,
+                            validatedDestinationCode,
+                            flightMode);
             final List<Notam> prioritizedNotams = prioritizer.prioritize(uniqueNotams);
 
             logger.info("Prioritized {} NOTAMs", prioritizedNotams.size());
-
 
             // Step 6: Display results
             displayResults(prioritizedNotams, departureCode, destinationCode, prioritizer);
@@ -215,103 +252,42 @@ public final class App {
     }
 
     /**
-     * Parses output configuration from command line options.
-     *
-     * @param line command line parsed options
-     * @param outputModeOption output mode option
-     * @param truncateLengthOption truncate length option
-     * @param delimitersOption delimiters option
-     * @param noDelimitersOption no delimiters option
-     * @param separateMetadataOption separate metadata option
-     * @param noSeparateMetadataOption no separate metadata option
-     * @return OutputConfig based on parsed options
-     */
-    private static OutputConfig parseOutputConfig(final CommandLine line,
-                                                  final Option outputModeOption,
-                                                  final Option truncateLengthOption,
-                                                  final Option delimitersOption,
-                                                  final Option noDelimitersOption,
-                                                  final Option separateMetadataOption,
-                                                  final Option noSeparateMetadataOption) {
-        OutputConfig.OutputMode mode = OutputConfig.OutputMode.FULL;
-        if (line.hasOption(outputModeOption)) {
-            final String modeValue = line.getOptionValue(outputModeOption);
-            if ("truncated".equalsIgnoreCase(modeValue)) {
-                mode = OutputConfig.OutputMode.TRUNCATED;
-            } else if (!"full".equalsIgnoreCase(modeValue)) {
-                logger.warn("Unknown output mode '{}', using 'full'", modeValue);
-            }
-        }
-
-        int truncateLength = 100;
-        if (line.hasOption(truncateLengthOption)) {
-            try {
-                truncateLength = Integer.parseInt(line.getOptionValue(truncateLengthOption));
-                if (truncateLength < 1) {
-                    logger.warn("Invalid truncate length {}, using default 100", truncateLength);
-                    truncateLength = 100;
-                }
-            } catch (final NumberFormatException e) {
-                logger.warn("Invalid truncate length value, using default 100", e);
-            }
-        }
-
-        boolean showDelimiters = true;
-        if (line.hasOption(noDelimitersOption)) {
-            showDelimiters = false;
-        } else if (line.hasOption(delimitersOption)) {
-            showDelimiters = true;
-        }
-
-        boolean separateMetadata = false;
-        if (line.hasOption(separateMetadataOption)) {
-            separateMetadata = true;
-        } else if (line.hasOption(noSeparateMetadataOption)) {
-            separateMetadata = false;
-        }
-
-        return new OutputConfig(mode, truncateLength, showDelimiters, separateMetadata);
-    }
-
-    /**
      * Displays prioritized NOTAMs to the user.
      * Shows NOTAMs sorted by priority (most important first).
      *
      * @param prioritizedNotams list of NOTAMs already sorted by priority
      * @param departureCode departure airport code
      * @param destinationCode destination airport code
+     * @param prioritizer the prioritizer used, so we can display the score
      */
     private static void displayResults(final List<Notam> prioritizedNotams,
                                        final String departureCode,
                                        final String destinationCode,
-
-                                       final SimplePrioritizer prioritizer) {
+                                       final NotamPrioritizer prioritizer) {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("NOTAMs for Flight: " + departureCode + " to " + destinationCode);
         System.out.println("Sorted by Priority (Most Important First)");
         System.out.println("=".repeat(80));
         System.out.println();
 
-        // Map domain -> printer DTOs (score is left null)
-
+        // Map domain -> printer DTOs, including score
         final List<NotamView> views = (prioritizedNotams == null)
-        		? Collections.emptyList()
+                ? Collections.emptyList()
                 : prioritizedNotams.stream()
-                    .map(n -> {
-                        final Instant issued = (n.getIssued() != null) ? n.getIssued().toInstant() : null;
-                        final double score = prioritizer.score(n);
-                        return new NotamView(
-                                n.getNumber(),          // notamNumber
-                                n.getLocation(),        // location (e.g., KOKC)
-                                n.getType(),            // classification/type if present
-                                issued,                 // start (best-effort)
-                                issued,                 // end (best-effort)
-                                n.getText(),            // condition text
-                                score                    // score (used by NotamPrinter)
-                        );
-                    })
-                    .collect(Collectors.toList());
-
+                .map(n -> {
+                    final Instant issued = (n.getIssued() != null) ? n.getIssued().toInstant() : null;
+                    final double score = prioritizer.score(n);
+                    return new NotamView(
+                            n.getNumber(),          // notamNumber
+                            n.getLocation(),        // location (e.g., KOKC)
+                            n.getType(),            // classification/type if present
+                            issued,                 // start (best-effort)
+                            issued,                 // end (best-effort)
+                            n.getText(),            // condition text
+                            score                   // score (used by NotamPrinter)
+                    );
+                })
+                .collect(Collectors.toList());
 
         final NotamPrinter printer = new NotamColorPrinter(ZoneId.systemDefault(), TimeMode.BOTH);
 
