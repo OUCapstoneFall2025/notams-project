@@ -10,8 +10,8 @@ public final class NotamColorPrinter extends NotamPrinter {
 
     private final AnsiOutputHelper ansi;
 
-    // Fixed score thresholds for coloring (based on SimplePrioritizer's scale ~0–165)
-    private static final double RED_MIN_SCORE    = 100.0;
+    // Fixed score thresholds for coloring (based on SimplePrioritizer's scale ~0–100)
+    private static final double RED_MIN_SCORE    = 70.0;
     private static final double YELLOW_MIN_SCORE = 50.0;
     // 0–49.999... = low priority
 

@@ -83,6 +83,9 @@ public final class FaaNotamApiWrapper
         private final String sortBy = "effectiveStartDate";
         private final String sortOrder = "Desc";
 
+        private String clientId;
+        private String clientSecret;
+
         /**
          * Creates a builder for ICAO location-based queries.
          *
@@ -142,6 +145,25 @@ public final class FaaNotamApiWrapper
         public QueryParamsBuilder pageNum(final int pageNum) {
             this.pageNum = pageNum;
             return this;
+        }
+        /**
+         * Sets the API credentials for this request.
+         *
+         * @param credentials The API credentials to use
+         * @return this builder for method chaining
+         */
+        public QueryParamsBuilder credentials(ApiCredentials credentials) {
+            this.clientId = credentials.getClientId();
+            this.clientSecret = credentials.getClientSecret();
+            return this;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public String getClientSecret() {
+            return clientSecret;
         }
 
         /**
@@ -212,14 +234,16 @@ public final class FaaNotamApiWrapper
                     && Objects.equals( longitude, that.longitude )
                     && Objects.equals( radiusNm, that.radiusNm )
                     && Objects.equals( pageSize, that.pageSize )
-                    && Objects.equals( pageNum, that.pageNum );
+                    && Objects.equals( pageNum, that.pageNum )
+                    && Objects.equals( clientId, that.clientId )
+                    && Objects.equals( clientSecret, that.clientSecret );
         }
 
         @Override
         public int hashCode()
         {
             return Objects.hash( icaoLocation, latitude, longitude, radiusNm,
-                    pageSize, pageNum, sortBy, sortOrder );
+                    pageSize, pageNum, sortBy, sortOrder, clientId, clientSecret );
         }
     }
 
@@ -237,10 +261,18 @@ public final class FaaNotamApiWrapper
     {
         logger.debug("Fetching NOTAMs with query parameters: {}", queryParams);
 
-        validateCredentials();
+        final String clientId = queryParams.getClientId() != null
+                ? queryParams.getClientId()
+                : System.getenv("FAA_CLIENT_ID");
 
-        final String clientId = System.getenv("FAA_CLIENT_ID");
-        final String clientSecret = System.getenv("FAA_CLIENT_SECRET");
+        final String clientSecret = queryParams.getClientSecret() != null
+                ? queryParams.getClientSecret()
+                : System.getenv("FAA_CLIENT_SECRET");
+
+        if (clientId == null || clientSecret == null) {
+            logger.error("FAA API credentials not found in query parameters or environment variables");
+            throw new IllegalStateException("FAA_CLIENT_ID or FAA_CLIENT_SECRET not set!");
+        }
 
         final String queryString = queryParams.build();
         final URI uri;

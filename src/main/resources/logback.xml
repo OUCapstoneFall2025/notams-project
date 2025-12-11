@@ -36,19 +36,19 @@
     </appender>
 
     <!-- Logger for API-related classes -->
-    <logger name="ou.capstone.notams.api.FaaNotamApiWrapper" level="DEBUG" additivity="false">
+    <logger name="ou.capstone.notams.api.FaaNotamApiWrapper" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="API_FILE" />
     </logger>
 
     <!-- Logger for main application -->
-    <logger name="ou.capstone.notams.App" level="DEBUG" additivity="false">
+    <logger name="ou.capstone.notams.App" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </logger>
 
     <!-- Logger for route calculator -->
-    <logger name="ou.capstone.notams.route.RouteCalculator" level="DEBUG" additivity="false">
+    <logger name="ou.capstone.notams.route.RouteCalculator" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </logger>
