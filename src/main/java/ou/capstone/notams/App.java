@@ -52,41 +52,40 @@ public final class App {
         // Prevent instantiation
     }
 
-    public static void main(final String[] args) throws ParseException
-    {
+    public static void main(final String[] args) throws ParseException {
         // Options could be marked as "required" but this interferes with the
         // ability to provide the help option (providing only `--help` means
         // that it will complain that --departure and --destination weren't
         // provided). Required args are manually checked below after handling
         // the help case.
-        final Option departureAirportOption = Option.builder( "d" )
-                .longOpt( "departure" ).hasArg()
-                .desc( "Departure airport code" ).get();
+        final Option departureAirportOption = Option.builder("d")
+                .longOpt("departure").hasArg()
+                .desc("Departure airport code").get();
         // 'a' for 'arrival' -- it's the best I could come up with that isn't
         // another d
-        final Option destinationAirportOption = Option.builder( "a" )
-                .longOpt( "destination" ).hasArg()
-                .desc( "Destination airport code" ).get();
-        final Option helpOption = Option.builder( "h" ).longOpt( "help" )
-                .desc( "Display help" ).get();
-        final Option outputModeOption = Option.builder( "o" )
-                .longOpt( "output-mode" ).hasArg()
-                .desc( "Output mode: 'full' or 'truncated' (default: full)" ).get();
-        final Option truncateLengthOption = Option.builder( "t" )
-                .longOpt( "truncate-length" ).hasArg()
-                .desc( "Maximum characters for truncated output (default: 100)" ).get();
+        final Option destinationAirportOption = Option.builder("a")
+                .longOpt("destination").hasArg()
+                .desc("Destination airport code").get();
+        final Option helpOption = Option.builder("h").longOpt("help")
+                .desc("Display help").get();
+        final Option outputModeOption = Option.builder("o")
+                .longOpt("output-mode").hasArg()
+                .desc("Output mode: 'full' or 'truncated' (default: full)").get();
+        final Option truncateLengthOption = Option.builder("t")
+                .longOpt("truncate-length").hasArg()
+                .desc("Maximum characters for truncated output (default: 100)").get();
         final Option delimitersOption = Option.builder()
-                .longOpt( "delimiters" )
-                .desc( "Show delimiters between NOTAMs (default: enabled)" ).get();
+                .longOpt("delimiters")
+                .desc("Show delimiters between NOTAMs (default: enabled)").get();
         final Option noDelimitersOption = Option.builder()
-                .longOpt( "no-delimiters" )
-                .desc( "Hide delimiters between NOTAMs" ).get();
+                .longOpt("no-delimiters")
+                .desc("Hide delimiters between NOTAMs").get();
         final Option separateMetadataOption = Option.builder()
-                .longOpt( "separate-metadata" )
-                .desc( "Separate metadata (score, location, etc.) from NOTAM text" ).get();
+                .longOpt("separate-metadata")
+                .desc("Separate metadata (score, location, etc.) from NOTAM text").get();
         final Option noSeparateMetadataOption = Option.builder()
-                .longOpt( "no-separate-metadata" )
-                .desc( "Do not separate metadata from NOTAM text (default)" ).get();
+                .longOpt("no-separate-metadata")
+                .desc("Do not separate metadata from NOTAM text (default)").get();
 
         // CCS-79: New option for IFR/VFR flight mode.
         final Option flightModeOption = Option.builder()
@@ -116,43 +115,43 @@ public final class App {
         final CommandLineParser cliParser = new DefaultParser();
         final CommandLine line;
         try {
-            line = cliParser.parse( options, args );
-        }
-        catch( final ParseException e ) {
-            logger.error( "Parsing args failed for reason: {}",
-                    e.getMessage() );
+            line = cliParser.parse(options, args);
+        } catch (final ParseException e) {
+            logger.error("Parsing args failed for reason: {}",
+                    e.getMessage());
             throw e;
         }
 
-        if( line.hasOption( helpOption ) || line.getOptions().length == 0 ) {
+        if (line.hasOption(helpOption) || line.getOptions().length == 0) {
             HelpFormatter helpFormatter = HelpFormatter.builder().get();
-            helpFormatter.printHelp( "app",
+            helpFormatter.printHelp("app",
                     "Notam Prioritization System Options", options,
                     "Please report bugs to https://ou-capstone-group-e.atlassian.net/jira/",
-                    true );
-            exitHandler.exit( 0 );
+                    true);
+            exitHandler.exit(0);
             return;
         }
 
         final boolean departureProvided = line.hasOption(
-                departureAirportOption );
+                departureAirportOption);
         final boolean destinationProvided = line.hasOption(
-                destinationAirportOption );
+                destinationAirportOption);
 
-        if( !departureProvided || !destinationProvided ) {
-            throw new ParseException( "Invalid options: " + (departureProvided ?
+        if (!departureProvided || !destinationProvided) {
+            throw new ParseException("Invalid options: " + (departureProvided ?
                     "Destination" :
-                    "Departure") + " airport code is required" );
+                    "Departure") + " airport code is required");
         }
 
-        logger.info( "NOTAM Prioritization System starting" );
+        logger.info("NOTAM Prioritization System starting");
 
+        NotamFetcher fetcher = null;
         try {
             // Step 1: Get user input
             final String departureCode = line.getOptionValue(
-                    departureAirportOption );
+                    departureAirportOption);
             final String destinationCode = line.getOptionValue(
-                    destinationAirportOption );
+                    destinationAirportOption);
 
             logger.info("Route: {} to {}", departureCode, destinationCode);
 
@@ -184,7 +183,7 @@ public final class App {
             if (!departureResult.isOk()) {
                 logger.error("Invalid departure airport: {}", departureResult.message());
                 System.err.println("Invalid departure airport: " + departureResult.message());
-                exitHandler.exit( 1 );
+                exitHandler.exit(1);
                 return;
             }
 
@@ -202,7 +201,7 @@ public final class App {
             final String validatedDestinationCode = getCodeFromValidation(destinationResult);
 
             logger.info("Using validated codes for API: {} to {}", validatedDepartureCode, validatedDestinationCode);
-            final NotamFetcher fetcher = new NotamFetcher();
+            fetcher = new NotamFetcher();
             final List<Notam> notams = fetcher.fetchForRoute(validatedDepartureCode, validatedDestinationCode);
             // NOTAMs are parsed in NotamFetcher
             logger.info("Fetched {} NOTAMs", notams.size());
@@ -248,6 +247,10 @@ public final class App {
             logger.error("Unexpected error during execution", e);
             System.err.println("\nUnexpected Error: " + e.getMessage());
             exitHandler.exit(1);
+        } finally {
+            if (fetcher != null) {
+                fetcher.shutdown();
+            }
         }
     }
 

@@ -47,7 +47,7 @@ public class NotamParser {
         logger.info("Starting GeoJSON parsing");
 
         if (geoJsonResponse == null || geoJsonResponse.trim().isEmpty()) {
-            logger.warn("Empty or null GeoJSON response provided");
+            logger.debug("Empty or null GeoJSON response provided");
             return java.util.Collections.emptyList();
         }
 
@@ -125,10 +125,10 @@ public class NotamParser {
                     }
                 } catch (final DateTimeParseException e) {
                     skipped++;
-                    logger.warn("Failed to parse feature {} due to date parsing error: {}", i + 1, e.getMessage());
+                    logger.debug("Failed to parse feature {} due to date parsing error: {}", i + 1, e.getMessage());
                 } catch (final Exception e) {
                     skipped++;
-                    logger.warn("Failed to parse feature {} due to unexpected error: {}", i + 1, e.getMessage());
+                    logger.debug("Failed to parse feature {} due to unexpected error: {}", i + 1, e.getMessage());
                 }
             }
 
@@ -226,7 +226,7 @@ public class NotamParser {
             } else {
                 latitude = null;
                 longitude = null;
-                logger.warn("NOTAM {} has no valid coordinates from geometry or text. Text preserved for flight safety: {}",
+                logger.debug("NOTAM {} has no valid coordinates from geometry or text. Text preserved for flight safety: {}",
                         id, text.substring(0, Math.min(100, text.length())));
             }
 
@@ -250,10 +250,10 @@ public class NotamParser {
                     .build();
 
         } catch (final DateTimeParseException e) {
-            logger.warn("Error parsing feature due to date parsing error: {}", e.getMessage());
+            logger.debug("Error parsing feature due to date parsing error: {}", e.getMessage());
             return null;
         } catch (final Exception e) {
-            logger.warn("Error parsing feature due to unexpected error: {}", e.getMessage());
+            logger.debug("Error parsing feature due to unexpected error: {}", e.getMessage());
             return null;
         }
     }
@@ -459,7 +459,7 @@ public class NotamParser {
             logger.debug("Successfully parsed timestamp: {}", timestamp);
             return result;
         } catch (final DateTimeParseException e) {
-            logger.warn("Failed to parse timestamp '{}': {}", timestamp, e.getMessage());
+            logger.debug("Failed to parse timestamp '{}': {}", timestamp, e.getMessage());
             return null;
         }
     }
@@ -613,7 +613,7 @@ public class NotamParser {
             // Handle case where radius appears in both locations
             if (hasGeometryRadius && hasNotamRadius) {
                 if (Math.abs(geometryRadius - notamRadius) > 0.001) { // Allow for small floating point differences
-                    logger.warn("Conflicting radius values found: geometry={} NM, notam={} NM. Using geometry radius (geometry takes precedence).",
+                    logger.debug("Conflicting radius values found: geometry={} NM, notam={} NM. Using geometry radius (geometry takes precedence).",
                             geometryRadius, notamRadius);
                 } else {
                     logger.debug("Radius found in both locations with consistent values: {} NM (using geometry)",
