@@ -1,13 +1,17 @@
 package ou.capstone.notams.api;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ou.capstone.notams.api.FaaNotamApiWrapper.QueryParamsBuilder;
 import ou.capstone.notams.Notam;
 import ou.capstone.notams.route.Coordinate;
 import ou.capstone.notams.route.RouteCalculator;
@@ -29,7 +33,13 @@ public class NotamFetcher {
     private static final Logger logger = LoggerFactory.getLogger(NotamFetcher.class);
 
     private final AirportDirectory airportDirectory;
-
+    
+ // Thread pool for parallel calls
+    private final ExecutorService executor =
+            Executors.newFixedThreadPool(
+                    Integer.parseInt(System.getenv().getOrDefault("NOTAM_FETCH_THREADS", "8"))
+            );
+    
     // Radius in nautical miles for location queries
     private static final int QUERY_RADIUS_NM = 50;
 
@@ -99,36 +109,73 @@ public class NotamFetcher {
 
         // Fetch NOTAMs
         final long fetchStart = System.currentTimeMillis();
-        List<Notam> notams = new ArrayList<>();
-        int index = 1;
-        for (Coordinate waypoint : waypoints) {
-            final long singleFetchStart = System.currentTimeMillis();
-            List<Notam> waypointNotams = java.util.Collections.emptyList();
 
+        final List<CompletableFuture<List<Notam>>> futures = new ArrayList<>();
+        int idx = 1;
+
+        for (Coordinate waypoint : waypoints) {
+            final int thisIndex = idx++;
+            futures.add(
+                CompletableFuture.supplyAsync(() -> {
+                    final long singleFetchStart = System.currentTimeMillis();
+                    List<Notam> waypointNotams = Collections.emptyList();
+
+                    try {
+                        waypointNotams = fetchForLocation(
+                                waypoint.getLatitude(),
+                                waypoint.getLongitude(),
+                                QUERY_RADIUS_NM
+                        );
+                    } catch (RateLimitException e) {
+                        // RateLimitException so caller can handle it
+                        throw new CompletionException(e);
+                    } catch (Exception e) {
+                        logger.warn("Skipping waypoint ({}, {}) due to error: {}",
+                                waypoint.getLatitude(), waypoint.getLongitude(), e.getMessage());
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Stack trace for failed waypoint:", e);
+                        }
+                    }
+
+                    final long singleFetchEnd = System.currentTimeMillis();
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Fetch {}/{} at ({}, {}) took {} ms ({} NOTAMs) [thread={}]",
+                                thisIndex, waypoints.size(),
+                                waypoint.getLatitude(), waypoint.getLongitude(),
+                                (singleFetchEnd - singleFetchStart), waypointNotams.size(),
+                                Thread.currentThread().getName());
+                    }
+
+                    return waypointNotams;
+                }, executor)
+            );
+        }
+
+        final List<Notam> notams = new ArrayList<>();
+        RateLimitException rateLimitException = null;
+
+        for (CompletableFuture<List<Notam>> f : futures) {
             try {
-                final QueryParamsBuilder queryParams =
-                    new QueryParamsBuilder(waypoint.getLatitude(), waypoint.getLongitude(), QUERY_RADIUS_NM).pageSize(200);
-                final List<String> results = FaaNotamApiWrapper.fetchAllPages(queryParams, HTTP_TIMEOUT_SECONDS);
-                waypointNotams = results.stream().map( parser::parseGeoJson )
-                        .flatMap( List::stream ).toList();
-                notams.addAll(waypointNotams);
-            } catch (final RateLimitException e) {
-                throw e;
-            } catch (final Exception e) {
-                logger.warn("Skipping waypoint ({}, {}) due to error: {}",
-                        waypoint.getLatitude(), waypoint.getLongitude(), e.getMessage());
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Stack trace for failed waypoint:", e);
+                notams.addAll(f.join());
+            } catch (CompletionException ce) {
+                final Throwable cause = ce.getCause();
+                if (cause instanceof RateLimitException re) {
+                    // remember the first RateLimitException to throw agian later
+                    if (rateLimitException == null) {
+                        rateLimitException = re;
+                    }
+                } else {
+                    logger.warn("Waypoint fetch failed with unexpected error: {}", cause.toString());
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Stack trace for unexpected error:", cause);
+                    }
                 }
             }
+        }
 
-            final long singleFetchEnd = System.currentTimeMillis();
-            if (logger.isDebugEnabled()) {
-                logger.debug("Fetch {}/{} at ({}, {}) took {} ms ({} NOTAMs)",
-                        index++, waypoints.size(),
-                        waypoint.getLatitude(), waypoint.getLongitude(),
-                        (singleFetchEnd - singleFetchStart), waypointNotams.size());
-            }
+        // If we hit the FAA rate limit in any parallel task, do it like before
+        if (rateLimitException != null) {
+            throw rateLimitException;
         }
 
         final long fetchEnd = System.currentTimeMillis();
